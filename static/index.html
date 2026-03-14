@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>InterVisions - So-B-IT Broken Mirror — What Does the Model See?</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Space+Grotesk:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500;700&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --bg-panel: rgba(15, 15, 25, 0.85);
+    --bg-card: rgba(20, 20, 35, 0.9);
+    --text: #e8e8f0;
+    --text-dim: #6b6b80;
+    --text-bright: #ffffff;
+    --accent: #6366f1;
+    --glow: rgba(99, 102, 241, 0.3);
+    --border: rgba(255, 255, 255, 0.06);
+    --font-mono: 'JetBrains Mono', monospace;
+    --font-display: 'Space Grotesk', sans-serif;
+    --font-body: 'DM Sans', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+  }
+
+  /* ── Layout ──────────────────────────────────────── */
+  #app {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    grid-template-rows: auto 1fr;
+    height: 100vh;
+    gap: 0;
+  }
+
+  /* ── Header ──────────────────────────────────────── */
+  #header {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-panel);
+    backdrop-filter: blur(20px);
+    z-index: 10;
+  }
+
+  #header h1 {
+    font-family: var(--font-display);
+    font-size: 1.3rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, #6366f1, #a78bfa, #f472b6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  #header .subtitle {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+  }
+
+  #header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  #webcam-container {
+    position: relative;
+    width: 120px;
+    height: 90px;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 2px solid var(--accent);
+    box-shadow: 0 0 20px var(--glow);
+  }
+
+  #webcam-video {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1);
+  }
+
+  #status-badge {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    padding: 4px 10px;
+    border-radius: 20px;
+    background: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+    border: 1px solid rgba(34, 197, 94, 0.3);
+  }
+
+  #status-badge.disconnected {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border-color: rgba(239, 68, 68, 0.3);
+  }
+
+  #inference-time {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--text-dim);
+  }
+
+  /* ── Main area: t-SNE ──────────────────────────── */
+  #main {
+    position: relative;
+    overflow: hidden;
+  }
+
+  #tsne-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  /* ── Right panel ──────────────────────────────── */
+  #sidebar {
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid var(--border);
+    background: var(--bg-panel);
+    backdrop-filter: blur(20px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.1) transparent;
+  }
+
+  .panel-section {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .panel-title {
+    font-family: var(--font-display);
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+  }
+
+  /* ── Term list ──────────────────────────────────── */
+  #term-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .term-item {
+    display: grid;
+    grid-template-columns: 8px 1fr auto;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.02);
+    transition: all 0.3s ease;
+    font-size: 0.82rem;
+  }
+
+  .term-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .term-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+  }
+
+  .term-word {
+    font-family: var(--font-display);
+    font-weight: 500;
+    color: var(--text-bright);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .term-cat {
+    font-size: 0.6rem;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+  }
+
+  .term-score {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--text-dim);
+  }
+
+  .term-bar-bg {
+    grid-column: 1 / -1;
+    height: 2px;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 1px;
+    overflow: hidden;
+  }
+
+  .term-bar {
+    height: 100%;
+    border-radius: 1px;
+    transition: width 0.5s ease;
+  }
+
+  /* ── FairFace predictions ──────────────────────── */
+  .ff-group { margin-bottom: 14px; }
+
+  .ff-group-title {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 6px;
+  }
+
+  .ff-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 3px;
+    font-size: 0.72rem;
+  }
+
+  .ff-label {
+    width: 90px;
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    flex-shrink: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ff-bar-bg {
+    flex: 1;
+    height: 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .ff-bar {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.4s ease;
+    background: var(--accent);
+  }
+
+  .ff-pct {
+    width: 40px;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--text-dim);
+  }
+
+  /* ── Category toggles ──────────────────────────── */
+  #category-toggles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .cat-toggle {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    padding: 3px 8px;
+    border-radius: 12px;
+    border: 1px solid;
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+    opacity: 1;
+  }
+
+  .cat-toggle.off {
+    opacity: 0.3;
+  }
+
+  /* ── Loading overlay ───────────────────────────── */
+  #loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    transition: opacity 0.6s ease;
+  }
+
+  #loading-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  #loading-overlay h2 {
+    font-family: var(--font-display);
+    font-size: 1.6rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    background: linear-gradient(135deg, #6366f1, #a78bfa, #f472b6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  #loading-status {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--text-dim);
+  }
+
+  .spinner {
+    width: 40px; height: 40px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 20px;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Fullscreen hint ───────────────────────────── */
+  #fs-hint {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    color: var(--text-dim);
+    opacity: 0.5;
+    z-index: 5;
+  }
+</style>
+</head>
+<body>
+
+<!-- Loading overlay -->
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <h2>InterVisions - So-B-IT Broken Mirror</h2>
+  <p id="loading-status">Connecting to server…</p>
+</div>
+
+<!-- Main app -->
+<div id="app">
+
+  <!-- Header with webcam -->
+  <div id="header">
+    <div>
+      <h1>InterVisions - So-B-IT Broken Mirror</h1>
+      <span class="subtitle">Interactive CLIP Bias Audit · What does the model see?</span>
+    </div>
+    <div id="header-right">
+      <span id="inference-time"></span>
+      <span id="status-badge" class="disconnected">disconnected</span>
+      <div id="webcam-container">
+        <video id="webcam-video" autoplay muted playsinline></video>
+        <canvas id="capture-canvas" style="display:none"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- t-SNE visualization -->
+  <div id="main">
+    <canvas id="tsne-canvas"></canvas>
+  </div>
+
+  <!-- Right sidebar -->
+  <div id="sidebar">
+
+    <!-- FairFace zero-shot -->
+    <div class="panel-section">
+      <div class="panel-title">Zero-Shot Classification (FairFace)</div>
+      <div id="fairface-container"></div>
+    </div>
+
+    <!-- Category filters -->
+    <div class="panel-section">
+      <div class="panel-title">Category Filters</div>
+      <div id="category-toggles"></div>
+    </div>
+
+    <!-- Top-K terms -->
+    <div class="panel-section">
+      <div class="panel-title">Closest So-B-IT Terms</div>
+      <ul id="term-list"></ul>
+    </div>
+
+  </div>
+</div>
+
+<div id="fs-hint">Press F11 for fullscreen</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+//  State
+// ═══════════════════════════════════════════════════════════════════════════
+const STATE = {
+  ws: null,
+  terms: [],          // from /api/init
+  categories: {},
+  fairfaceLabels: {},
+  maxLabels: 20,
+  activeCategories: new Set(),
+  userPos: [0, 0],
+  lastResult: null,
+  sending: false,
+  connected: false,
+  // t-SNE rendering
+  canvas: null,
+  ctx: null,
+  dpr: 1,
+  width: 0,
+  height: 0,
+};
+
+// FairFace bar colors per attribute
+const FF_COLORS = {
+  race: '#6366f1',
+  gender: '#f472b6',
+  age: '#a78bfa',
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Init
+// ═══════════════════════════════════════════════════════════════════════════
+async function init() {
+  setLoadingStatus('Fetching taxonomy and embeddings…');
+
+  // Fetch init data from server
+  const resp = await fetch('/api/init');
+  const data = await resp.json();
+
+  STATE.terms = data.terms;
+  STATE.categories = data.categories;
+  STATE.fairfaceLabels = data.fairface_labels;
+  STATE.maxLabels = data.max_labels;
+
+  // Activate all categories by default
+  for (const cat of Object.keys(STATE.categories)) {
+    STATE.activeCategories.add(cat);
+  }
+
+  // Build category toggles
+  buildCategoryToggles();
+  buildFairFaceContainer();
+
+  // Setup canvas
+  setupCanvas();
+
+  // Start webcam
+  setLoadingStatus('Starting camera…');
+  await startWebcam();
+
+  // Connect WebSocket
+  setLoadingStatus('Connecting to inference server…');
+  connectWebSocket();
+
+  // Start render loop
+  requestAnimationFrame(renderLoop);
+
+  // Hide loading after a moment
+  setTimeout(() => {
+    document.getElementById('loading-overlay').classList.add('hidden');
+  }, 800);
+}
+
+function setLoadingStatus(text) {
+  document.getElementById('loading-status').textContent = text;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Webcam
+// ═══════════════════════════════════════════════════════════════════════════
+async function startWebcam() {
+  const video = document.getElementById('webcam-video');
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+    audio: false,
+  });
+  video.srcObject = stream;
+  await video.play();
+}
+
+function captureFrame() {
+  const video = document.getElementById('webcam-video');
+  const canvas = document.getElementById('capture-canvas');
+  canvas.width = 320;  // downscale for fast transfer
+  canvas.height = 240;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0, 320, 240);
+  return canvas.toDataURL('image/jpeg', 0.8);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  WebSocket
+// ═══════════════════════════════════════════════════════════════════════════
+function connectWebSocket() {
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const url = `${protocol}//${location.host}/ws`;
+
+  STATE.ws = new WebSocket(url);
+
+  STATE.ws.onopen = () => {
+    STATE.connected = true;
+    updateStatusBadge(true);
+    // Start sending frames
+    sendFrame();
+  };
+
+  STATE.ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    if (data.type === 'result') {
+      STATE.lastResult = data;
+      STATE.userPos = data.user_tsne;
+      updateTermList(data.top_terms);
+      updateFairFace(data.fairface);
+      document.getElementById('inference-time').textContent = `${data.inference_ms}ms`;
+      STATE.sending = false;
+      // Send next frame after a short delay (throttle to ~5-8 FPS inference)
+      setTimeout(sendFrame, 120);
+    }
+  };
+
+  STATE.ws.onclose = () => {
+    STATE.connected = false;
+    updateStatusBadge(false);
+    // Reconnect after delay
+    setTimeout(connectWebSocket, 2000);
+  };
+
+  STATE.ws.onerror = () => {
+    STATE.connected = false;
+    updateStatusBadge(false);
+  };
+}
+
+function sendFrame() {
+  if (!STATE.connected || STATE.sending) return;
+  STATE.sending = true;
+  const frameData = captureFrame();
+  STATE.ws.send(JSON.stringify({
+    type: 'frame',
+    data: frameData,
+    top_k: 15,
+  }));
+}
+
+function updateStatusBadge(connected) {
+  const badge = document.getElementById('status-badge');
+  badge.textContent = connected ? 'live' : 'disconnected';
+  badge.className = connected ? '' : 'disconnected';
+  badge.id = 'status-badge';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Term list (sidebar)
+// ═══════════════════════════════════════════════════════════════════════════
+function updateTermList(topTerms) {
+  const list = document.getElementById('term-list');
+  // Filter by active categories
+  const filtered = topTerms.filter(t => STATE.activeCategories.has(t.category));
+
+  // Reuse or rebuild items
+  while (list.children.length > filtered.length) list.removeChild(list.lastChild);
+
+  const maxSim = filtered.length > 0 ? filtered[0].similarity : 1;
+
+  filtered.forEach((term, i) => {
+    let item = list.children[i];
+    if (!item) {
+      item = document.createElement('li');
+      item.className = 'term-item';
+      item.innerHTML = `
+        <div class="term-dot"></div>
+        <div>
+          <div class="term-word"></div>
+          <div class="term-cat"></div>
+        </div>
+        <div class="term-score"></div>
+      `;
+      // Add bar
+      const barBg = document.createElement('div');
+      barBg.className = 'term-bar-bg';
+      barBg.innerHTML = '<div class="term-bar"></div>';
+      item.appendChild(barBg);
+      list.appendChild(item);
+    }
+
+    item.querySelector('.term-dot').style.background = term.color;
+    item.querySelector('.term-word').textContent = term.word;
+    item.querySelector('.term-cat').textContent = term.category;
+    item.querySelector('.term-score').textContent = term.similarity.toFixed(3);
+    const bar = item.querySelector('.term-bar');
+    const pct = maxSim > 0 ? (term.similarity / maxSim) * 100 : 0;
+    bar.style.width = pct + '%';
+    bar.style.background = term.color;
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  FairFace predictions (sidebar)
+// ═══════════════════════════════════════════════════════════════════════════
+function buildFairFaceContainer() {
+  const container = document.getElementById('fairface-container');
+  container.innerHTML = '';
+
+  for (const [attr, labels] of Object.entries(STATE.fairfaceLabels)) {
+    const group = document.createElement('div');
+    group.className = 'ff-group';
+    group.innerHTML = `<div class="ff-group-title">${attr}</div>`;
+
+    labels.forEach(label => {
+      const row = document.createElement('div');
+      row.className = 'ff-bar-row';
+      row.dataset.attr = attr;
+      row.dataset.label = label;
+      row.innerHTML = `
+        <span class="ff-label">${label}</span>
+        <div class="ff-bar-bg"><div class="ff-bar" style="width:0%;background:${FF_COLORS[attr] || '#6366f1'}"></div></div>
+        <span class="ff-pct">0%</span>
+      `;
+      group.appendChild(row);
+    });
+
+    container.appendChild(group);
+  }
+}
+
+function updateFairFace(fairface) {
+  for (const [attr, probs] of Object.entries(fairface)) {
+    for (const [label, prob] of Object.entries(probs)) {
+      const row = document.querySelector(`.ff-bar-row[data-attr="${attr}"][data-label="${label}"]`);
+      if (!row) continue;
+      const bar = row.querySelector('.ff-bar');
+      const pct = row.querySelector('.ff-pct');
+      bar.style.width = (prob * 100) + '%';
+      pct.textContent = (prob * 100).toFixed(1) + '%';
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Category toggles
+// ═══════════════════════════════════════════════════════════════════════════
+function buildCategoryToggles() {
+  const container = document.getElementById('category-toggles');
+  container.innerHTML = '';
+
+  for (const [cat, info] of Object.entries(STATE.categories)) {
+    const btn = document.createElement('span');
+    btn.className = 'cat-toggle';
+    btn.textContent = cat;
+    btn.style.borderColor = info.color;
+    btn.style.color = info.color;
+    btn.style.background = info.color + '15';
+    btn.dataset.cat = cat;
+
+    btn.addEventListener('click', () => {
+      if (STATE.activeCategories.has(cat)) {
+        STATE.activeCategories.delete(cat);
+        btn.classList.add('off');
+      } else {
+        STATE.activeCategories.add(cat);
+        btn.classList.remove('off');
+      }
+    });
+
+    container.appendChild(btn);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  t-SNE Canvas Rendering
+// ═══════════════════════════════════════════════════════════════════════════
+function setupCanvas() {
+  STATE.canvas = document.getElementById('tsne-canvas');
+  STATE.ctx = STATE.canvas.getContext('2d');
+  STATE.dpr = window.devicePixelRatio || 1;
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+}
+
+function resizeCanvas() {
+  const rect = STATE.canvas.parentElement.getBoundingClientRect();
+  STATE.width = rect.width;
+  STATE.height = rect.height;
+  STATE.canvas.width = rect.width * STATE.dpr;
+  STATE.canvas.height = rect.height * STATE.dpr;
+  STATE.canvas.style.width = rect.width + 'px';
+  STATE.canvas.style.height = rect.height + 'px';
+  STATE.ctx.setTransform(STATE.dpr, 0, 0, STATE.dpr, 0, 0);
+}
+
+function tsneToPixel(x, y) {
+  // Map [-1, 1] to canvas with padding
+  const pad = 60;
+  const px = pad + (x + 1) / 2 * (STATE.width - 2 * pad);
+  const py = pad + (1 - (y + 1) / 2) * (STATE.height - 2 * pad);
+  return [px, py];
+}
+
+// Smoothed user position for animation
+let smoothUserX = 0, smoothUserY = 0;
+
+function renderLoop() {
+  const ctx = STATE.ctx;
+  const w = STATE.width;
+  const h = STATE.height;
+
+  // Clear
+  ctx.clearRect(0, 0, w, h);
+
+  // Background gradient
+  const grad = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.max(w, h) * 0.6);
+  grad.addColorStop(0, '#0f0f1a');
+  grad.addColorStop(1, '#0a0a0f');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+
+  // Draw subtle grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.02)';
+  ctx.lineWidth = 1;
+  const gridStep = 80;
+  for (let x = gridStep; x < w; x += gridStep) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+  }
+  for (let y = gridStep; y < h; y += gridStep) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+  }
+
+  // Draw term dots
+  const terms = STATE.terms;
+  const active = STATE.activeCategories;
+  const topWords = STATE.lastResult ? new Set(STATE.lastResult.top_terms.map(t => t.word)) : new Set();
+
+  // First pass: dim dots (inactive or not top-k)
+  for (const term of terms) {
+    if (!active.has(term.category)) continue;
+    const [px, py] = tsneToPixel(term.x, term.y);
+    const isTop = topWords.has(term.word);
+
+    // Glow for top terms
+    if (isTop) {
+      ctx.beginPath();
+      const glow = ctx.createRadialGradient(px, py, 0, px, py, 18);
+      glow.addColorStop(0, term.color + '40');
+      glow.addColorStop(1, 'transparent');
+      ctx.fillStyle = glow;
+      ctx.arc(px, py, 18, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Dot
+    ctx.beginPath();
+    ctx.arc(px, py, isTop ? 5 : 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = isTop ? term.color : term.color + '60';
+    ctx.fill();
+  }
+
+  // Second pass: labels for top-k terms (avoid overlap with simple collision)
+  const placedLabels = [];
+
+  // Sort top terms by similarity (highest first) to prioritise label placement
+  const topTermsSorted = STATE.lastResult
+    ? [...STATE.lastResult.top_terms]
+        .filter(t => active.has(t.category))
+        .slice(0, STATE.maxLabels)
+    : [];
+
+  ctx.font = '500 11px "Space Grotesk", sans-serif';
+  ctx.textBaseline = 'middle';
+
+  for (const tt of topTermsSorted) {
+    const termData = terms.find(t => t.word === tt.word && t.category === tt.category);
+    if (!termData) continue;
+    const [px, py] = tsneToPixel(termData.x, termData.y);
+
+    // Try a few label positions to avoid overlap
+    const labelW = ctx.measureText(termData.word).width + 4;
+    const labelH = 14;
+    let bestPos = null;
+    const offsets = [
+      [8, -2], [8, 10], [-labelW - 8, -2], [8, -14],
+      [-labelW - 8, 10], [-labelW - 8, -14], [8, 20], [8, -24]
+    ];
+
+    for (const [ox, oy] of offsets) {
+      const lx = px + ox;
+      const ly = py + oy;
+      let collision = false;
+      for (const placed of placedLabels) {
+        if (lx < placed.x + placed.w && lx + labelW > placed.x &&
+            ly < placed.y + placed.h && ly + labelH > placed.y) {
+          collision = true;
+          break;
+        }
+      }
+      if (!collision) {
+        bestPos = [lx, ly];
+        break;
+      }
+    }
+
+    if (bestPos) {
+      const [lx, ly] = bestPos;
+      placedLabels.push({ x: lx, y: ly, w: labelW, h: labelH });
+
+      // Background pill
+      ctx.fillStyle = 'rgba(10, 10, 20, 0.75)';
+      ctx.beginPath();
+      roundRect(ctx, lx - 2, ly - 1, labelW, labelH, 3);
+      ctx.fill();
+
+      // Text
+      ctx.fillStyle = termData.color;
+      ctx.fillText(termData.word, lx, ly + labelH / 2);
+    }
+  }
+
+  // Draw user position (animated)
+  if (STATE.lastResult) {
+    const targetX = STATE.userPos[0];
+    const targetY = STATE.userPos[1];
+    smoothUserX += (targetX - smoothUserX) * 0.15;
+    smoothUserY += (targetY - smoothUserY) * 0.15;
+
+    const [ux, uy] = tsneToPixel(smoothUserX, smoothUserY);
+
+    // Pulsing glow
+    const t = Date.now() / 1000;
+    const pulse = 0.7 + 0.3 * Math.sin(t * 3);
+
+    // Outer glow
+    const userGlow = ctx.createRadialGradient(ux, uy, 0, ux, uy, 35 * pulse);
+    userGlow.addColorStop(0, 'rgba(255, 255, 255, 0.25)');
+    userGlow.addColorStop(0.5, 'rgba(99, 102, 241, 0.1)');
+    userGlow.addColorStop(1, 'transparent');
+    ctx.beginPath();
+    ctx.arc(ux, uy, 35 * pulse, 0, Math.PI * 2);
+    ctx.fillStyle = userGlow;
+    ctx.fill();
+
+    // Star shape for "YOU"
+    drawStar(ctx, ux, uy, 8, 14, 5);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.strokeStyle = '#6366f1';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Label
+    ctx.font = 'bold 13px "Space Grotesk", sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText('YOU', ux + 18, uy + 1);
+  }
+
+  requestAnimationFrame(renderLoop);
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+}
+
+function drawStar(ctx, cx, cy, innerR, outerR, points) {
+  ctx.beginPath();
+  for (let i = 0; i < points * 2; i++) {
+    const r = i % 2 === 0 ? outerR : innerR;
+    const angle = (i * Math.PI) / points - Math.PI / 2;
+    const x = cx + Math.cos(angle) * r;
+    const y = cy + Math.sin(angle) * r;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Boot
+// ═══════════════════════════════════════════════════════════════════════════
+window.addEventListener('load', init);
+</script>
+</body>
+</html>
