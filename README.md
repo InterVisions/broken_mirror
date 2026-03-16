@@ -134,16 +134,6 @@ sobit-mirror/
 └── README.md
 ```
 
----
-
-## TODO
-
-- [ ] **Parametric t-SNE projection:** Replace the current weighted nearest-neighbour interpolation for the user's position with a learned projection. 
-- [ ] **Filter top-k by active categories:** The top-k term list should only consider terms from currently active (toggled-on) categories. 
-- [ ] **Review FairFace age prompts:** The 0-2 age category consistently gets high probability — likely a prompt issue. Consider whether all age bins make sense for a webcam-based workshop setting.
-- [ ] **Pause button for camera stream:** Add a pause/freeze button that holds the last frame and keeps the current predictions stable on screen, so participants can read the top-k list and FairFace bars without them jumping around.
-
----
 
 ## Credits
 
