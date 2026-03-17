@@ -68,8 +68,7 @@ Allow camera access when prompted.
 
 ---
 
-## Command-Line Parameters
-
+## Command-Line Parameter
 | Parameter | Default | Description |
 |---|---|---|
 | `--model` | `ViT-B/32` | CLIP model. Options: `ViT-B/32`, `ViT-B/16`, `ViT-L/14`, `ViT-H/14`, or any `open_clip` model string like `ViT-B-32:laion2b_s34b_b79k` |

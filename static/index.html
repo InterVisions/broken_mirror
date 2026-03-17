@@ -84,12 +84,47 @@
     overflow: hidden;
     border: 2px solid var(--accent);
     box-shadow: 0 0 20px var(--glow);
+    transition: border-color 0.3s ease;
+  }
+
+  #webcam-container.paused {
+    border-color: #f59e0b;
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.3);
   }
 
   #webcam-video {
     width: 100%; height: 100%;
     object-fit: cover;
     transform: scaleX(-1);
+    transition: filter 0.3s ease;
+  }
+
+  #webcam-video.paused {
+    filter: grayscale(60%) brightness(0.7);
+  }
+
+  /* Pause overlay on webcam */
+  #webcam-pause-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.45);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+    border-radius: 8px;
+  }
+
+  #webcam-pause-overlay.visible {
+    opacity: 1;
+  }
+
+  #webcam-pause-overlay svg {
+    width: 28px;
+    height: 28px;
+    fill: rgba(255,255,255,0.85);
   }
 
   #status-badge {
@@ -108,10 +143,83 @@
     border-color: rgba(239, 68, 68, 0.3);
   }
 
+  #status-badge.paused-badge {
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+    border-color: rgba(245, 158, 11, 0.3);
+  }
+
   #inference-time {
     font-family: var(--font-mono);
     font-size: 0.65rem;
     color: var(--text-dim);
+  }
+
+  /* ── Pause Button ────────────────────────────────── */
+  #pause-btn {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 500;
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.05);
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+    letter-spacing: 0.04em;
+  }
+
+  #pause-btn:hover {
+    background: rgba(255,255,255,0.1);
+    border-color: rgba(255,255,255,0.25);
+  }
+
+  #pause-btn.is-paused {
+    background: rgba(245, 158, 11, 0.12);
+    border-color: rgba(245, 158, 11, 0.4);
+    color: #f59e0b;
+    box-shadow: 0 0 12px rgba(245, 158, 11, 0.15);
+  }
+
+  #pause-btn.is-paused:hover {
+    background: rgba(245, 158, 11, 0.2);
+  }
+
+  #pause-btn svg {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    transition: transform 0.2s ease;
+  }
+
+  /* Freeze banner on t-SNE canvas area */
+  #freeze-banner {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 5px 14px;
+    border-radius: 20px;
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    color: #f59e0b;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+    z-index: 5;
+  }
+
+  #freeze-banner.visible {
+    opacity: 1;
   }
 
   /* ── Main area: t-SNE ──────────────────────────── */
@@ -373,10 +481,27 @@
     </div>
     <div id="header-right">
       <span id="inference-time"></span>
+
+      <!-- PAUSE BUTTON -->
+      <button id="pause-btn" title="Freeze frame (Space)">
+        <svg id="pause-icon" viewBox="0 0 12 12" fill="currentColor">
+          <rect x="1.5" y="1" width="3.5" height="10" rx="1"/>
+          <rect x="7" y="1" width="3.5" height="10" rx="1"/>
+        </svg>
+        <svg id="play-icon" viewBox="0 0 12 12" fill="currentColor" style="display:none">
+          <path d="M2 1.5 L10 6 L2 10.5 Z"/>
+        </svg>
+        <span id="pause-btn-label">Freeze</span>
+      </button>
+
       <span id="status-badge" class="disconnected">disconnected</span>
       <div id="webcam-container">
         <video id="webcam-video" autoplay muted playsinline></video>
         <canvas id="capture-canvas" style="display:none"></canvas>
+        <!-- Pause overlay icon on webcam thumbnail -->
+        <div id="webcam-pause-overlay">
+          <svg viewBox="0 0 24 24"><rect x="5" y="3" width="4" height="18" rx="1.5"/><rect x="15" y="3" width="4" height="18" rx="1.5"/></svg>
+        </div>
       </div>
     </div>
   </div>
@@ -384,6 +509,8 @@
   <!-- t-SNE visualization -->
   <div id="main">
     <canvas id="tsne-canvas"></canvas>
+    <!-- Freeze banner -->
+    <div id="freeze-banner">⏸ Frozen — press Space or click Freeze to resume</div>
   </div>
 
   <!-- Right sidebar -->
@@ -410,7 +537,7 @@
   </div>
 </div>
 
-<div id="fs-hint">Press F11 for fullscreen</div>
+<div id="fs-hint">Press F11 for fullscreen · Space to freeze/unfreeze</div>
 
 <script>
 // ═══════════════════════════════════════════════════════════════════════════
@@ -418,7 +545,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 const STATE = {
   ws: null,
-  terms: [],          // from /api/init
+  terms: [],
   categories: {},
   fairfaceLabels: {},
   maxLabels: 20,
@@ -427,6 +554,7 @@ const STATE = {
   lastResult: null,
   sending: false,
   connected: false,
+  paused: false,          // ← NEW: freeze flag
   // t-SNE rendering
   canvas: null,
   ctx: null,
@@ -435,7 +563,6 @@ const STATE = {
   height: 0,
 };
 
-// FairFace bar colors per attribute
 const FF_COLORS = {
   race: '#6366f1',
   gender: '#f472b6',
@@ -448,7 +575,6 @@ const FF_COLORS = {
 async function init() {
   setLoadingStatus('Fetching taxonomy and embeddings…');
 
-  // Fetch init data from server
   const resp = await fetch('/api/init');
   const data = await resp.json();
 
@@ -457,30 +583,33 @@ async function init() {
   STATE.fairfaceLabels = data.fairface_labels;
   STATE.maxLabels = data.max_labels;
 
-  // Activate all categories by default
   for (const cat of Object.keys(STATE.categories)) {
     STATE.activeCategories.add(cat);
   }
 
-  // Build category toggles
   buildCategoryToggles();
   buildFairFaceContainer();
-
-  // Setup canvas
   setupCanvas();
 
-  // Start webcam
   setLoadingStatus('Starting camera…');
   await startWebcam();
 
-  // Connect WebSocket
   setLoadingStatus('Connecting to inference server…');
   connectWebSocket();
 
-  // Start render loop
+  // Wire up pause button
+  document.getElementById('pause-btn').addEventListener('click', togglePause);
+
+  // Space bar shortcut
+  document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+      e.preventDefault();
+      togglePause();
+    }
+  });
+
   requestAnimationFrame(renderLoop);
 
-  // Hide loading after a moment
   setTimeout(() => {
     document.getElementById('loading-overlay').classList.add('hidden');
   }, 800);
@@ -488,6 +617,58 @@ async function init() {
 
 function setLoadingStatus(text) {
   document.getElementById('loading-status').textContent = text;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Pause / Freeze
+// ═══════════════════════════════════════════════════════════════════════════
+function togglePause() {
+  STATE.paused = !STATE.paused;
+  applyPauseUI();
+
+  // If unpausing, immediately kick off the next frame
+  if (!STATE.paused) {
+    STATE.sending = false;
+    sendFrame();
+  }
+}
+
+function applyPauseUI() {
+  const paused = STATE.paused;
+
+  // Button
+  const btn = document.getElementById('pause-btn');
+  const label = document.getElementById('pause-btn-label');
+  const pauseIcon = document.getElementById('pause-icon');
+  const playIcon = document.getElementById('play-icon');
+
+  btn.classList.toggle('is-paused', paused);
+  label.textContent = paused ? 'Resume' : 'Freeze';
+  pauseIcon.style.display = paused ? 'none' : 'block';
+  playIcon.style.display = paused ? 'block' : 'none';
+
+  // Webcam thumbnail
+  document.getElementById('webcam-video').classList.toggle('paused', paused);
+  document.getElementById('webcam-container').classList.toggle('paused', paused);
+  document.getElementById('webcam-pause-overlay').classList.toggle('visible', paused);
+
+  // Status badge
+  const badge = document.getElementById('status-badge');
+  if (paused) {
+    badge.textContent = 'frozen';
+    badge.classList.remove('disconnected');
+    badge.classList.add('paused-badge');
+  } else if (STATE.connected) {
+    badge.textContent = 'live';
+    badge.classList.remove('paused-badge', 'disconnected');
+  } else {
+    badge.textContent = 'disconnected';
+    badge.classList.remove('paused-badge');
+    badge.classList.add('disconnected');
+  }
+
+  // Freeze banner over t-SNE canvas
+  document.getElementById('freeze-banner').classList.toggle('visible', paused);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -506,7 +687,7 @@ async function startWebcam() {
 function captureFrame() {
   const video = document.getElementById('webcam-video');
   const canvas = document.getElementById('capture-canvas');
-  canvas.width = 320;  // downscale for fast transfer
+  canvas.width = 320;
   canvas.height = 240;
   const ctx = canvas.getContext('2d');
   ctx.drawImage(video, 0, 0, 320, 240);
@@ -524,40 +705,44 @@ function connectWebSocket() {
 
   STATE.ws.onopen = () => {
     STATE.connected = true;
-    updateStatusBadge(true);
-    // Start sending frames
+    if (!STATE.paused) updateStatusBadge(true);
     sendFrame();
   };
 
   STATE.ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
     if (data.type === 'result') {
-      STATE.lastResult = data;
-      STATE.userPos = data.user_tsne;
-      updateTermList(data.top_terms);
-      updateFairFace(data.fairface);
-      document.getElementById('inference-time').textContent = `${data.inference_ms}ms`;
+      // Only update display if not paused
+      if (!STATE.paused) {
+        STATE.lastResult = data;
+        STATE.userPos = data.user_tsne;
+        updateTermList(data.top_terms);
+        updateFairFace(data.fairface);
+        document.getElementById('inference-time').textContent = `${data.inference_ms}ms`;
+      }
       STATE.sending = false;
-      // Send next frame after a short delay (throttle to ~5-8 FPS inference)
-      setTimeout(sendFrame, 120);
+      // Schedule next frame only if not paused
+      if (!STATE.paused) {
+        setTimeout(sendFrame, 120);
+      }
     }
   };
 
   STATE.ws.onclose = () => {
     STATE.connected = false;
-    updateStatusBadge(false);
-    // Reconnect after delay
+    if (!STATE.paused) updateStatusBadge(false);
     setTimeout(connectWebSocket, 2000);
   };
 
   STATE.ws.onerror = () => {
     STATE.connected = false;
-    updateStatusBadge(false);
+    if (!STATE.paused) updateStatusBadge(false);
   };
 }
 
 function sendFrame() {
-  if (!STATE.connected || STATE.sending) return;
+  // Guard: don't send if paused, not connected, or already waiting for a response
+  if (STATE.paused || !STATE.connected || STATE.sending) return;
   STATE.sending = true;
   const frameData = captureFrame();
   STATE.ws.send(JSON.stringify({
@@ -568,6 +753,7 @@ function sendFrame() {
 }
 
 function updateStatusBadge(connected) {
+  if (STATE.paused) return;  // don't overwrite paused badge
   const badge = document.getElementById('status-badge');
   badge.textContent = connected ? 'live' : 'disconnected';
   badge.className = connected ? '' : 'disconnected';
@@ -579,10 +765,8 @@ function updateStatusBadge(connected) {
 // ═══════════════════════════════════════════════════════════════════════════
 function updateTermList(topTerms) {
   const list = document.getElementById('term-list');
-  // Filter by active categories
   const filtered = topTerms.filter(t => STATE.activeCategories.has(t.category));
 
-  // Reuse or rebuild items
   while (list.children.length > filtered.length) list.removeChild(list.lastChild);
 
   const maxSim = filtered.length > 0 ? filtered[0].similarity : 1;
@@ -600,7 +784,6 @@ function updateTermList(topTerms) {
         </div>
         <div class="term-score"></div>
       `;
-      // Add bar
       const barBg = document.createElement('div');
       barBg.className = 'term-bar-bg';
       barBg.innerHTML = '<div class="term-bar"></div>';
@@ -714,14 +897,12 @@ function resizeCanvas() {
 }
 
 function tsneToPixel(x, y) {
-  // Map [-1, 1] to canvas with padding
   const pad = 60;
   const px = pad + (x + 1) / 2 * (STATE.width - 2 * pad);
   const py = pad + (1 - (y + 1) / 2) * (STATE.height - 2 * pad);
   return [px, py];
 }
 
-// Smoothed user position for animation
 let smoothUserX = 0, smoothUserY = 0;
 
 function renderLoop() {
@@ -729,17 +910,16 @@ function renderLoop() {
   const w = STATE.width;
   const h = STATE.height;
 
-  // Clear
+  // When paused, only re-draw for the pulsing animation on the user dot
+  // (everything else is static, but we still need rAF for the pulse effect)
   ctx.clearRect(0, 0, w, h);
 
-  // Background gradient
   const grad = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.max(w, h) * 0.6);
   grad.addColorStop(0, '#0f0f1a');
   grad.addColorStop(1, '#0a0a0f');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, w, h);
 
-  // Draw subtle grid
   ctx.strokeStyle = 'rgba(255,255,255,0.02)';
   ctx.lineWidth = 1;
   const gridStep = 80;
@@ -750,18 +930,15 @@ function renderLoop() {
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
   }
 
-  // Draw term dots
   const terms = STATE.terms;
   const active = STATE.activeCategories;
   const topWords = STATE.lastResult ? new Set(STATE.lastResult.top_terms.map(t => t.word)) : new Set();
 
-  // First pass: dim dots (inactive or not top-k)
   for (const term of terms) {
     if (!active.has(term.category)) continue;
     const [px, py] = tsneToPixel(term.x, term.y);
     const isTop = topWords.has(term.word);
 
-    // Glow for top terms
     if (isTop) {
       ctx.beginPath();
       const glow = ctx.createRadialGradient(px, py, 0, px, py, 18);
@@ -772,17 +949,13 @@ function renderLoop() {
       ctx.fill();
     }
 
-    // Dot
     ctx.beginPath();
     ctx.arc(px, py, isTop ? 5 : 2.5, 0, Math.PI * 2);
     ctx.fillStyle = isTop ? term.color : term.color + '60';
     ctx.fill();
   }
 
-  // Second pass: labels for top-k terms (avoid overlap with simple collision)
   const placedLabels = [];
-
-  // Sort top terms by similarity (highest first) to prioritise label placement
   const topTermsSorted = STATE.lastResult
     ? [...STATE.lastResult.top_terms]
         .filter(t => active.has(t.category))
@@ -797,7 +970,6 @@ function renderLoop() {
     if (!termData) continue;
     const [px, py] = tsneToPixel(termData.x, termData.y);
 
-    // Try a few label positions to avoid overlap
     const labelW = ctx.measureText(termData.word).width + 4;
     const labelH = 14;
     let bestPos = null;
@@ -827,52 +999,51 @@ function renderLoop() {
       const [lx, ly] = bestPos;
       placedLabels.push({ x: lx, y: ly, w: labelW, h: labelH });
 
-      // Background pill
       ctx.fillStyle = 'rgba(10, 10, 20, 0.75)';
       ctx.beginPath();
       roundRect(ctx, lx - 2, ly - 1, labelW, labelH, 3);
       ctx.fill();
 
-      // Text
       ctx.fillStyle = termData.color;
       ctx.fillText(termData.word, lx, ly + labelH / 2);
     }
   }
 
-  // Draw user position (animated)
+  // User dot — always animates even when paused (smoothing stops when paused)
   if (STATE.lastResult) {
-    const targetX = STATE.userPos[0];
-    const targetY = STATE.userPos[1];
-    smoothUserX += (targetX - smoothUserX) * 0.15;
-    smoothUserY += (targetY - smoothUserY) * 0.15;
+    if (!STATE.paused) {
+      // Only smooth-move when live
+      smoothUserX += (STATE.userPos[0] - smoothUserX) * 0.15;
+      smoothUserY += (STATE.userPos[1] - smoothUserY) * 0.15;
+    }
 
     const [ux, uy] = tsneToPixel(smoothUserX, smoothUserY);
 
-    // Pulsing glow
     const t = Date.now() / 1000;
-    const pulse = 0.7 + 0.3 * Math.sin(t * 3);
+    // Slower, dimmer pulse when paused
+    const pulseSpeed = STATE.paused ? 1.2 : 3;
+    const pulseAmp = STATE.paused ? 0.1 : 0.3;
+    const pulse = (1 - pulseAmp) + pulseAmp * Math.sin(t * pulseSpeed);
 
-    // Outer glow
+    const outerAlpha = STATE.paused ? 0.12 : 0.25;
     const userGlow = ctx.createRadialGradient(ux, uy, 0, ux, uy, 35 * pulse);
-    userGlow.addColorStop(0, 'rgba(255, 255, 255, 0.25)');
-    userGlow.addColorStop(0.5, 'rgba(99, 102, 241, 0.1)');
+    userGlow.addColorStop(0, `rgba(255, 255, 255, ${outerAlpha})`);
+    userGlow.addColorStop(0.5, STATE.paused ? 'rgba(245, 158, 11, 0.08)' : 'rgba(99, 102, 241, 0.1)');
     userGlow.addColorStop(1, 'transparent');
     ctx.beginPath();
     ctx.arc(ux, uy, 35 * pulse, 0, Math.PI * 2);
     ctx.fillStyle = userGlow;
     ctx.fill();
 
-    // Star shape for "YOU"
     drawStar(ctx, ux, uy, 8, 14, 5);
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = STATE.paused ? 'rgba(255,255,255,0.55)' : '#ffffff';
     ctx.fill();
-    ctx.strokeStyle = '#6366f1';
+    ctx.strokeStyle = STATE.paused ? '#f59e0b' : '#6366f1';
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    // Label
     ctx.font = 'bold 13px "Space Grotesk", sans-serif';
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = STATE.paused ? 'rgba(255,255,255,0.55)' : '#ffffff';
     ctx.fillText('YOU', ux + 18, uy + 1);
   }
 
@@ -903,7 +1074,6 @@ function drawStar(ctx, cx, cy, innerR, outerR, points) {
   }
   ctx.closePath();
 }
-
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  Boot
