@@ -132,6 +132,19 @@ def encode_image_tensor(img: Image.Image) -> torch.Tensor:
 #  Precomputation at startup
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def make_fairface_prompt(attr: str, value: str) -> str:
+    """Generate a natural-language CLIP prompt for a FairFace attribute/value pair."""
+    if attr == "age":
+        # Age labels are already full noun phrases (e.g. "young adult", "elderly person")
+        # so we just wrap them directly — no trailing "person"
+        return f"a photo of a {value}"
+    elif attr == "gender":
+        return f"a photo of a {value.lower()} person"
+    elif attr == "race":
+        return f"a photo of a {value} person"
+    else:
+        return f"a photo of a {value} person"
+
 def build_text_embeddings(taxonomy: dict):
     """
     Build text embeddings for every So-B-IT term and FairFace labels.
@@ -156,7 +169,7 @@ def build_text_embeddings(taxonomy: dict):
     ff = taxonomy.get("fairface_labels", {})
     ff_emb = {}
     for attr, values in ff.items():
-        prompts = [f"a photo of a {v} person" for v in values]
+        prompts = [make_fairface_prompt(attr, v) for v in values]
         ff_emb[attr] = {"labels": values, "embeddings": encode_texts(prompts)}
         log.info(f"  FairFace/{attr}: {len(values)} classes")
 
