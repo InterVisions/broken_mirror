@@ -22,6 +22,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from PIL import Image
+from pydantic import BaseModel
 from sklearn.manifold import TSNE
 
 # ── Logging ──────────────────────────────────────────────────────────────────
@@ -40,6 +41,7 @@ FAIRFACE_EMBEDDINGS = {}     # key -> (M, D) tensor for zero-shot classification
 TSNE_COORDS = None           # (N, 2) numpy array — precomputed 2-D layout for terms
 MAX_LABELS = 20
 CLIP_BACKEND = "open_clip"   # or "openai_clip"
+args = None                  # parsed CLI args (set in main)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -56,7 +58,6 @@ def load_clip_model(model_name: str, device: str):
     # ── Try open_clip ────────────────────────────────────────────────────────
     try:
         import open_clip
-        # Map friendly names to open_clip identifiers
         oc_map = {
             "ViT-B/32":  ("ViT-B-32",  "openai"),
             "ViT-B/16":  ("ViT-B-16",  "openai"),
@@ -66,7 +67,6 @@ def load_clip_model(model_name: str, device: str):
         if model_name in oc_map:
             arch, pretrained = oc_map[model_name]
         else:
-            # Allow direct open_clip spec like "ViT-B-32:laion2b"
             parts = model_name.split(":")
             arch = parts[0]
             pretrained = parts[1] if len(parts) > 1 else "openai"
@@ -110,11 +110,7 @@ def encode_texts(texts: list[str]) -> torch.Tensor:
     else:
         tokens = {k: v.to(DEVICE) for k, v in tokens.items()}
 
-    if CLIP_BACKEND == "open_clip":
-        feats = MODEL.encode_text(tokens)
-    else:
-        feats = MODEL.encode_text(tokens)
-
+    feats = MODEL.encode_text(tokens)
     feats = F.normalize(feats, dim=-1)
     return feats
 
@@ -135,8 +131,6 @@ def encode_image_tensor(img: Image.Image) -> torch.Tensor:
 def make_fairface_prompt(attr: str, value: str) -> str:
     """Generate a natural-language CLIP prompt for a FairFace attribute/value pair."""
     if attr == "age":
-        # Age labels are already full noun phrases (e.g. "young adult", "elderly person")
-        # so we just wrap them directly — no trailing "person"
         return f"a photo of a {value}"
     elif attr == "gender":
         return f"a photo of a {value.lower()} person"
@@ -144,6 +138,16 @@ def make_fairface_prompt(attr: str, value: str) -> str:
         return f"a photo of a {value} person"
     else:
         return f"a photo of a {value} person"
+
+
+def make_prompt(word: str, category: str) -> str:
+    """Generate a CLIP prompt for a taxonomy word."""
+    occupations_like = {"Occupation", "Political"}
+    if category in occupations_like:
+        return f"a photo of a {word}"
+    else:
+        return f"a photo of a {word} person"
+
 
 def build_text_embeddings(taxonomy: dict):
     """
@@ -165,7 +169,6 @@ def build_text_embeddings(taxonomy: dict):
     text_emb = encode_texts(all_prompts)
     log.info(f"✓ Text embeddings shape: {text_emb.shape}")
 
-    # FairFace zero-shot labels
     ff = taxonomy.get("fairface_labels", {})
     ff_emb = {}
     for attr, values in ff.items():
@@ -176,16 +179,6 @@ def build_text_embeddings(taxonomy: dict):
     return text_emb, labels, ff_emb
 
 
-def make_prompt(word: str, category: str) -> str:
-    """Generate a CLIP prompt for a taxonomy word."""
-    # Use templates from the paper
-    occupations_like = {"Occupation", "Political"}
-    if category in occupations_like:
-        return f"a photo of a {word}"
-    else:
-        return f"a photo of a {word} person"
-
-
 def compute_tsne(embeddings: torch.Tensor, perplexity: int = 30, seed: int = 42) -> np.ndarray:
     """Run t-SNE on the text embeddings → (N, 2) coordinates."""
     log.info("Computing t-SNE layout …")
@@ -194,7 +187,6 @@ def compute_tsne(embeddings: torch.Tensor, perplexity: int = 30, seed: int = 42)
     perp = min(perplexity, max(5, n // 4))
     tsne = TSNE(n_components=2, perplexity=perp, random_state=seed, max_iter=1000)
     coords = tsne.fit_transform(X)
-    # Normalise to [-1, 1] range for the frontend
     coords -= coords.mean(axis=0)
     scale = np.abs(coords).max()
     if scale > 0:
@@ -203,27 +195,33 @@ def compute_tsne(embeddings: torch.Tensor, perplexity: int = 30, seed: int = 42)
     return coords
 
 
+def interpolate_tsne_position(new_emb: torch.Tensor) -> np.ndarray:
+    """
+    Project a new embedding into the existing t-SNE space via weighted
+    nearest-neighbour interpolation. Same logic used for the user dot.
+    """
+    sims = (new_emb @ TEXT_EMBEDDINGS.T).squeeze(0).cpu().numpy()
+    k = min(10, len(sims))
+    top_idx = np.argsort(sims)[::-1][:k]
+    weights = np.maximum(sims[top_idx], 0)
+    w_sum = weights.sum()
+    if w_sum < 1e-8:
+        return np.array([0.0, 0.0])
+    weights /= w_sum
+    return (TSNE_COORDS[top_idx] * weights[:, None]).sum(axis=0)
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Inference on a single frame
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @torch.no_grad()
 def process_frame(img: Image.Image, top_k: int = 15) -> dict:
-    """
-    Given a webcam frame (PIL), return:
-    - top_k closest So-B-IT terms with similarity scores
-    - zero-shot FairFace classification probabilities
-    - user embedding projected to t-SNE space
-    """
     t0 = time.time()
 
-    # Encode image
     img_emb = encode_image_tensor(img)  # (1, D)
-
-    # Cosine similarities to all So-B-IT terms
     sims = (img_emb @ TEXT_EMBEDDINGS.T).squeeze(0).cpu().numpy()  # (N,)
 
-    # Top-k
     top_idx = np.argsort(sims)[::-1][:top_k]
     top_terms = []
     for idx in top_idx:
@@ -236,19 +234,16 @@ def process_frame(img: Image.Image, top_k: int = 15) -> dict:
             "similarity": round(float(sims[idx]), 4),
         })
 
-    # Zero-shot FairFace classification
     fairface = {}
     for attr, data in FAIRFACE_EMBEDDINGS.items():
-        logits = (img_emb @ data["embeddings"].T).squeeze(0)  # (C,)
-        probs = F.softmax(logits * 100, dim=0).cpu().numpy()  # temperature-scaled
+        logits = (img_emb @ data["embeddings"].T).squeeze(0)
+        probs = F.softmax(logits * 100, dim=0).cpu().numpy()
         fairface[attr] = {
             label: round(float(p), 4)
             for label, p in zip(data["labels"], probs)
         }
 
-    # Project user embedding into t-SNE space (approximate via nearest-neighbor interpolation)
     user_tsne = project_to_tsne(img_emb)
-
     elapsed = time.time() - t0
 
     return {
@@ -260,16 +255,11 @@ def process_frame(img: Image.Image, top_k: int = 15) -> dict:
 
 
 def project_to_tsne(img_emb: torch.Tensor) -> list:
-    """
-    Project user embedding into the precomputed t-SNE space.
-    Uses weighted average of K nearest text embedding positions.
-    """
     sims = (img_emb @ TEXT_EMBEDDINGS.T).squeeze(0).cpu().numpy()
-    # Use top-10 neighbours, weighted by similarity
     k = min(10, len(sims))
     top_idx = np.argsort(sims)[::-1][:k]
     weights = sims[top_idx]
-    weights = np.maximum(weights, 0)  # clip negatives
+    weights = np.maximum(weights, 0)
     w_sum = weights.sum()
     if w_sum < 1e-8:
         return [0.0, 0.0]
@@ -284,7 +274,6 @@ def project_to_tsne(img_emb: torch.Tensor) -> list:
 
 app = FastAPI(title="InterVisions - So-B-IT Broken Mirror")
 
-# Serve static files (frontend)
 STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
@@ -320,6 +309,84 @@ async def api_init():
     }
 
 
+# ── Custom word endpoint ──────────────────────────────────────────────────────
+
+CUSTOM_COLOR = "#FFFFFF"
+
+class AddWordRequest(BaseModel):
+    word: str
+    category: str = "Custom"
+    color: str = CUSTOM_COLOR
+
+
+@app.post("/api/add_word")
+async def add_word(req: AddWordRequest):
+    """
+    Embed a new word live and append it to the global state.
+    The t-SNE position is interpolated from the nearest existing terms
+    so the existing layout is not disturbed.
+    """
+    global TEXT_EMBEDDINGS, TEXT_LABELS, TSNE_COORDS
+
+    word = req.word.strip().lower()
+    if not word:
+        return {"status": "error", "message": "Empty word"}
+
+    # Duplicate check (same word + same category)
+    if any(l["word"] == word and l["category"] == req.category for l in TEXT_LABELS):
+        return {"status": "duplicate", "word": word}
+
+    # Embed the new word using the same prompt template
+    prompt = make_prompt(word, req.category)
+    log.info(f"Embedding custom word: '{word}' (prompt: '{prompt}')")
+    new_emb = encode_texts([prompt])  # (1, D)
+
+    # Interpolate position in existing t-SNE space
+    tsne_pos = interpolate_tsne_position(new_emb)
+
+    # Append to global tensors / lists — thread-safe enough for a workshop context
+    TEXT_EMBEDDINGS = torch.cat([TEXT_EMBEDDINGS, new_emb], dim=0)
+    TEXT_LABELS.append({"word": word, "category": req.category, "color": req.color})
+    TSNE_COORDS = np.vstack([TSNE_COORDS, tsne_pos])
+
+    # Also register the word in the in-memory taxonomy so /api/init stays consistent
+    if req.category in TAXONOMY["categories"]:
+        if word not in TAXONOMY["categories"][req.category]["words"]:
+            TAXONOMY["categories"][req.category]["words"].append(word)
+    else:
+        TAXONOMY["categories"][req.category] = {"color": req.color, "words": [word]}
+
+    log.info(f"✓ Added '{word}' at t-SNE ({tsne_pos[0]:.3f}, {tsne_pos[1]:.3f})")
+
+    return {
+        "status": "ok",
+        "word": word,
+        "category": req.category,
+        "color": req.color,
+        "x": round(float(tsne_pos[0]), 4),
+        "y": round(float(tsne_pos[1]), 4),
+    }
+
+
+@app.delete("/api/custom_words")
+async def clear_custom_words():
+    """Remove all custom words from the session (does not affect So-B-IT terms)."""
+    global TEXT_EMBEDDINGS, TEXT_LABELS, TSNE_COORDS
+
+    keep = [i for i, l in enumerate(TEXT_LABELS) if l["category"] != "Custom"]
+    TEXT_EMBEDDINGS = TEXT_EMBEDDINGS[keep]
+    TEXT_LABELS = [TEXT_LABELS[i] for i in keep]
+    TSNE_COORDS = TSNE_COORDS[keep]
+
+    if "Custom" in TAXONOMY["categories"]:
+        TAXONOMY["categories"]["Custom"]["words"] = []
+
+    log.info("Cleared all custom words")
+    return {"status": "ok", "removed": len(TEXT_LABELS) - len(keep)}
+
+
+# ── WebSocket ─────────────────────────────────────────────────────────────────
+
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
@@ -330,9 +397,7 @@ async def websocket_endpoint(ws: WebSocket):
             msg = json.loads(data)
 
             if msg.get("type") == "frame":
-                # Decode base64 JPEG
                 img_b64 = msg["data"]
-                # Strip data URL prefix if present
                 if "," in img_b64:
                     img_b64 = img_b64.split(",", 1)[1]
                 img_bytes = base64.b64decode(img_b64)
@@ -355,22 +420,14 @@ async def websocket_endpoint(ws: WebSocket):
 
 def parse_args():
     p = argparse.ArgumentParser(description="InterVisions So-B-IT Broken Mirror — CLIP Bias Audit Tool")
-    p.add_argument("--model", default="ViT-B/32",
-                   help="CLIP model name (default: ViT-B/32)")
-    p.add_argument("--device", default="auto",
-                   help="Device: cuda, cpu, or auto (default: auto)")
-    p.add_argument("--port", type=int, default=8765,
-                   help="Server port (default: 8765)")
-    p.add_argument("--host", default="0.0.0.0",
-                   help="Server host (default: 0.0.0.0)")
-    p.add_argument("--max-labels", type=int, default=20,
-                   help="Max number of labels to show in the t-SNE plot (default: 20)")
-    p.add_argument("--top-k", type=int, default=15,
-                   help="Default number of top terms returned (default: 15)")
-    p.add_argument("--taxonomy", default=None,
-                   help="Path to custom taxonomy JSON (default: config/sobit_taxonomy.json)")
-    p.add_argument("--tsne-perplexity", type=int, default=30,
-                   help="t-SNE perplexity (default: 30)")
+    p.add_argument("--model", default="ViT-B/32")
+    p.add_argument("--device", default="auto")
+    p.add_argument("--port", type=int, default=8765)
+    p.add_argument("--host", default="0.0.0.0")
+    p.add_argument("--max-labels", type=int, default=20)
+    p.add_argument("--top-k", type=int, default=15)
+    p.add_argument("--taxonomy", default=None)
+    p.add_argument("--tsne-perplexity", type=int, default=30)
     return p.parse_args()
 
 
@@ -382,29 +439,26 @@ def main():
     args = parse_args()
     MAX_LABELS = args.max_labels
 
-    # Device
     if args.device == "auto":
         DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     else:
         DEVICE = args.device
     log.info(f"Device: {DEVICE}")
 
-    # Load model
     MODEL, PREPROCESS, TOKENIZER, _ = load_clip_model(args.model, DEVICE)
 
-    # Load taxonomy
     tax_path = args.taxonomy or str(Path(__file__).parent / "config" / "sobit_taxonomy.json")
     with open(tax_path) as f:
         TAXONOMY = json.load(f)
     log.info(f"Loaded taxonomy from {tax_path}")
 
-    # Build text embeddings
-    TEXT_EMBEDDINGS, TEXT_LABELS, FAIRFACE_EMBEDDINGS = build_text_embeddings(TAXONOMY)
+    # Register Custom category so it's available from the start
+    if "Custom" not in TAXONOMY["categories"]:
+        TAXONOMY["categories"]["Custom"] = {"color": CUSTOM_COLOR, "words": []}
 
-    # Precompute t-SNE
+    TEXT_EMBEDDINGS, TEXT_LABELS, FAIRFACE_EMBEDDINGS = build_text_embeddings(TAXONOMY)
     TSNE_COORDS = compute_tsne(TEXT_EMBEDDINGS, perplexity=args.tsne_perplexity)
 
-    # Run server
     import uvicorn
     log.info(f"Starting server on http://{args.host}:{args.port}")
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")

@@ -103,7 +103,6 @@
     filter: grayscale(60%) brightness(0.7);
   }
 
-  /* Pause overlay on webcam */
   #webcam-pause-overlay {
     position: absolute;
     inset: 0;
@@ -117,9 +116,7 @@
     border-radius: 8px;
   }
 
-  #webcam-pause-overlay.visible {
-    opacity: 1;
-  }
+  #webcam-pause-overlay.visible { opacity: 1; }
 
   #webcam-pause-overlay svg {
     width: 28px;
@@ -186,18 +183,14 @@
     box-shadow: 0 0 12px rgba(245, 158, 11, 0.15);
   }
 
-  #pause-btn.is-paused:hover {
-    background: rgba(245, 158, 11, 0.2);
-  }
+  #pause-btn.is-paused:hover { background: rgba(245, 158, 11, 0.2); }
 
   #pause-btn svg {
     width: 12px;
     height: 12px;
     flex-shrink: 0;
-    transition: transform 0.2s ease;
   }
 
-  /* Freeze banner on t-SNE canvas area */
   #freeze-banner {
     position: absolute;
     top: 12px;
@@ -218,9 +211,7 @@
     z-index: 5;
   }
 
-  #freeze-banner.visible {
-    opacity: 1;
-  }
+  #freeze-banner.visible { opacity: 1; }
 
   /* ── Main area: t-SNE ──────────────────────────── */
   #main {
@@ -281,14 +272,9 @@
     font-size: 0.82rem;
   }
 
-  .term-item:hover {
-    background: rgba(255, 255, 255, 0.05);
-  }
+  .term-item:hover { background: rgba(255, 255, 255, 0.05); }
 
-  .term-dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-  }
+  .term-dot { width: 8px; height: 8px; border-radius: 50%; }
 
   .term-word {
     font-family: var(--font-display);
@@ -299,17 +285,9 @@
     text-overflow: ellipsis;
   }
 
-  .term-cat {
-    font-size: 0.6rem;
-    color: var(--text-dim);
-    font-family: var(--font-mono);
-  }
+  .term-cat { font-size: 0.6rem; color: var(--text-dim); font-family: var(--font-mono); }
 
-  .term-score {
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
-    color: var(--text-dim);
-  }
+  .term-score { font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-dim); }
 
   .term-bar-bg {
     grid-column: 1 / -1;
@@ -319,11 +297,7 @@
     overflow: hidden;
   }
 
-  .term-bar {
-    height: 100%;
-    border-radius: 1px;
-    transition: width 0.5s ease;
-  }
+  .term-bar { height: 100%; border-radius: 1px; transition: width 0.5s ease; }
 
   /* ── FairFace predictions ──────────────────────── */
   .ff-group { margin-bottom: 14px; }
@@ -372,19 +346,10 @@
     background: var(--accent);
   }
 
-  .ff-pct {
-    width: 40px;
-    font-family: var(--font-mono);
-    font-size: 0.65rem;
-    color: var(--text-dim);
-  }
+  .ff-pct { width: 40px; font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-dim); }
 
   /* ── Category toggles ──────────────────────────── */
-  #category-toggles {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
+  #category-toggles { display: flex; flex-wrap: wrap; gap: 6px; }
 
   .cat-toggle {
     font-family: var(--font-mono);
@@ -395,12 +360,115 @@
     cursor: pointer;
     transition: all 0.2s;
     user-select: none;
-    opacity: 1;
   }
 
-  .cat-toggle.off {
-    opacity: 0.3;
+  .cat-toggle.off { opacity: 0.3; }
+
+  /* ── Custom word input ──────────────────────────── */
+  #custom-word-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
   }
+
+  #custom-word-input {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    padding: 6px 10px;
+    color: #fff;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  #custom-word-input:focus {
+    border-color: rgba(99, 102, 241, 0.5);
+  }
+
+  #custom-word-input::placeholder { color: var(--text-dim); }
+
+  #custom-word-btn {
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid rgba(99, 102, 241, 0.35);
+    background: rgba(99, 102, 241, 0.15);
+    color: #a78bfa;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  #custom-word-btn:hover {
+    background: rgba(99, 102, 241, 0.28);
+    border-color: rgba(99, 102, 241, 0.55);
+  }
+
+  #custom-word-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  #custom-word-status {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    color: var(--text-dim);
+    margin-top: 6px;
+    min-height: 14px;
+    transition: color 0.2s;
+  }
+
+  #custom-word-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 10px;
+  }
+
+  .custom-chip {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    padding: 2px 8px 2px 8px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--text);
+  }
+
+  .custom-chip-remove {
+    cursor: pointer;
+    color: var(--text-dim);
+    font-size: 0.7rem;
+    line-height: 1;
+    padding: 0 1px;
+    transition: color 0.15s;
+  }
+
+  .custom-chip-remove:hover { color: #ef4444; }
+
+  #custom-clear-btn {
+    display: none;
+    margin-top: 8px;
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    color: var(--text-dim);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    transition: color 0.15s;
+  }
+
+  #custom-clear-btn:hover { color: #ef4444; }
 
   /* ── Loading overlay ───────────────────────────── */
   #loading-overlay {
@@ -415,10 +483,7 @@
     transition: opacity 0.6s ease;
   }
 
-  #loading-overlay.hidden {
-    opacity: 0;
-    pointer-events: none;
-  }
+  #loading-overlay.hidden { opacity: 0; pointer-events: none; }
 
   #loading-overlay h2 {
     font-family: var(--font-display);
@@ -447,7 +512,6 @@
 
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* ── Fullscreen hint ───────────────────────────── */
   #fs-hint {
     position: fixed;
     bottom: 16px;
@@ -482,7 +546,6 @@
     <div id="header-right">
       <span id="inference-time"></span>
 
-      <!-- PAUSE BUTTON -->
       <button id="pause-btn" title="Freeze frame (Space)">
         <svg id="pause-icon" viewBox="0 0 12 12" fill="currentColor">
           <rect x="1.5" y="1" width="3.5" height="10" rx="1"/>
@@ -498,7 +561,6 @@
       <div id="webcam-container">
         <video id="webcam-video" autoplay muted playsinline></video>
         <canvas id="capture-canvas" style="display:none"></canvas>
-        <!-- Pause overlay icon on webcam thumbnail -->
         <div id="webcam-pause-overlay">
           <svg viewBox="0 0 24 24"><rect x="5" y="3" width="4" height="18" rx="1.5"/><rect x="15" y="3" width="4" height="18" rx="1.5"/></svg>
         </div>
@@ -509,7 +571,6 @@
   <!-- t-SNE visualization -->
   <div id="main">
     <canvas id="tsne-canvas"></canvas>
-    <!-- Freeze banner -->
     <div id="freeze-banner">⏸ Frozen — press Space or click Freeze to resume</div>
   </div>
 
@@ -526,6 +587,25 @@
     <div class="panel-section">
       <div class="panel-title">Category Filters</div>
       <div id="category-toggles"></div>
+    </div>
+
+    <!-- Custom word input -->
+    <div class="panel-section">
+      <div class="panel-title">Add Custom Word</div>
+      <div id="custom-word-row">
+        <input
+          id="custom-word-input"
+          type="text"
+          placeholder="e.g. powerful, elegant…"
+          maxlength="60"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button id="custom-word-btn">Add</button>
+      </div>
+      <div id="custom-word-status"></div>
+      <div id="custom-word-chips"></div>
+      <button id="custom-clear-btn">clear all custom words</button>
     </div>
 
     <!-- Top-K terms -->
@@ -554,13 +634,14 @@ const STATE = {
   lastResult: null,
   sending: false,
   connected: false,
-  paused: false,          // ← NEW: freeze flag
-  // t-SNE rendering
+  paused: false,
   canvas: null,
   ctx: null,
   dpr: 1,
   width: 0,
   height: 0,
+  // Custom words added this session
+  customWords: [],
 };
 
 const FF_COLORS = {
@@ -568,6 +649,8 @@ const FF_COLORS = {
   gender: '#f472b6',
   age: '#a78bfa',
 };
+
+const CUSTOM_COLOR = '#FFFFFF';
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  Init
@@ -590,6 +673,7 @@ async function init() {
   buildCategoryToggles();
   buildFairFaceContainer();
   setupCanvas();
+  setupCustomWordUI();
 
   setLoadingStatus('Starting camera…');
   await startWebcam();
@@ -597,10 +681,8 @@ async function init() {
   setLoadingStatus('Connecting to inference server…');
   connectWebSocket();
 
-  // Wire up pause button
   document.getElementById('pause-btn').addEventListener('click', togglePause);
 
-  // Space bar shortcut
   document.addEventListener('keydown', (e) => {
     if (e.code === 'Space' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
       e.preventDefault();
@@ -620,13 +702,143 @@ function setLoadingStatus(text) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  Custom word UI
+// ═══════════════════════════════════════════════════════════════════════════
+function setupCustomWordUI() {
+  const btn = document.getElementById('custom-word-btn');
+  const input = document.getElementById('custom-word-input');
+  const clearBtn = document.getElementById('custom-clear-btn');
+
+  btn.addEventListener('click', addCustomWord);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') addCustomWord();
+  });
+  clearBtn.addEventListener('click', clearAllCustomWords);
+}
+
+async function addCustomWord() {
+  const input = document.getElementById('custom-word-input');
+  const status = document.getElementById('custom-word-status');
+  const btn = document.getElementById('custom-word-btn');
+  const word = input.value.trim().toLowerCase();
+
+  if (!word) return;
+
+  // Prevent double-submit
+  btn.disabled = true;
+  setCustomStatus('Embedding…', 'var(--text-dim)');
+
+  try {
+    const resp = await fetch('/api/add_word', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ word, category: 'Custom', color: CUSTOM_COLOR }),
+    });
+    const data = await resp.json();
+
+    if (data.status === 'duplicate') {
+      setCustomStatus(`"${word}" already exists`, '#f59e0b');
+      btn.disabled = false;
+      return;
+    }
+
+    if (data.status === 'error') {
+      setCustomStatus(data.message || 'Server error', '#ef4444');
+      btn.disabled = false;
+      return;
+    }
+
+    // Append to local STATE.terms so t-SNE canvas picks it up immediately
+    STATE.terms.push({
+      word: data.word,
+      category: data.category,
+      color: data.color,
+      x: data.x,
+      y: data.y,
+    });
+
+    // Track in session list
+    STATE.customWords.push(data.word);
+
+    // Make sure Custom category is registered and active
+    if (!STATE.categories['Custom']) {
+      STATE.categories['Custom'] = { color: CUSTOM_COLOR, count: 0 };
+    }
+    STATE.categories['Custom'].count = STATE.customWords.length;
+    STATE.activeCategories.add('Custom');
+
+    // Re-render category toggles if Custom wasn't there before
+    if (!document.querySelector('.cat-toggle[data-cat="Custom"]')) {
+      buildCategoryToggles();
+    }
+
+    renderCustomChips();
+    setCustomStatus(`✓ "${data.word}" added and embedded`, '#22c55e');
+    input.value = '';
+
+    setTimeout(() => setCustomStatus('', 'var(--text-dim)'), 3000);
+
+  } catch (err) {
+    setCustomStatus('Network error — is the server running?', '#ef4444');
+  }
+
+  btn.disabled = false;
+}
+
+async function clearAllCustomWords() {
+  if (STATE.customWords.length === 0) return;
+
+  try {
+    await fetch('/api/custom_words', { method: 'DELETE' });
+  } catch (_) {
+    // Best-effort — even if the request fails, clean up client state
+  }
+
+  // Remove custom words from local STATE.terms
+  STATE.terms = STATE.terms.filter(t => t.category !== 'Custom');
+  STATE.customWords = [];
+
+  renderCustomChips();
+  setCustomStatus('Custom words cleared', 'var(--text-dim)');
+  setTimeout(() => setCustomStatus('', 'var(--text-dim)'), 2000);
+}
+
+function removeCustomWord(word) {
+  // Remove from local state (no server endpoint for individual removal — keep it simple)
+  STATE.terms = STATE.terms.filter(t => !(t.word === word && t.category === 'Custom'));
+  STATE.customWords = STATE.customWords.filter(w => w !== word);
+  renderCustomChips();
+}
+
+function renderCustomChips() {
+  const container = document.getElementById('custom-word-chips');
+  const clearBtn = document.getElementById('custom-clear-btn');
+
+  container.innerHTML = '';
+
+  STATE.customWords.forEach(word => {
+    const chip = document.createElement('span');
+    chip.className = 'custom-chip';
+    chip.innerHTML = `${word}<span class="custom-chip-remove" title="Remove from view" data-word="${word}">✕</span>`;
+    chip.querySelector('.custom-chip-remove').addEventListener('click', () => removeCustomWord(word));
+    container.appendChild(chip);
+  });
+
+  clearBtn.style.display = STATE.customWords.length > 1 ? 'block' : 'none';
+}
+
+function setCustomStatus(msg, color) {
+  const el = document.getElementById('custom-word-status');
+  el.textContent = msg;
+  el.style.color = color;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  Pause / Freeze
 // ═══════════════════════════════════════════════════════════════════════════
 function togglePause() {
   STATE.paused = !STATE.paused;
   applyPauseUI();
-
-  // If unpausing, immediately kick off the next frame
   if (!STATE.paused) {
     STATE.sending = false;
     sendFrame();
@@ -635,8 +847,6 @@ function togglePause() {
 
 function applyPauseUI() {
   const paused = STATE.paused;
-
-  // Button
   const btn = document.getElementById('pause-btn');
   const label = document.getElementById('pause-btn-label');
   const pauseIcon = document.getElementById('pause-icon');
@@ -647,12 +857,10 @@ function applyPauseUI() {
   pauseIcon.style.display = paused ? 'none' : 'block';
   playIcon.style.display = paused ? 'block' : 'none';
 
-  // Webcam thumbnail
   document.getElementById('webcam-video').classList.toggle('paused', paused);
   document.getElementById('webcam-container').classList.toggle('paused', paused);
   document.getElementById('webcam-pause-overlay').classList.toggle('visible', paused);
 
-  // Status badge
   const badge = document.getElementById('status-badge');
   if (paused) {
     badge.textContent = 'frozen';
@@ -667,7 +875,6 @@ function applyPauseUI() {
     badge.classList.add('disconnected');
   }
 
-  // Freeze banner over t-SNE canvas
   document.getElementById('freeze-banner').classList.toggle('visible', paused);
 }
 
@@ -700,7 +907,6 @@ function captureFrame() {
 function connectWebSocket() {
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const url = `${protocol}//${location.host}/ws`;
-
   STATE.ws = new WebSocket(url);
 
   STATE.ws.onopen = () => {
@@ -712,7 +918,6 @@ function connectWebSocket() {
   STATE.ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
     if (data.type === 'result') {
-      // Only update display if not paused
       if (!STATE.paused) {
         STATE.lastResult = data;
         STATE.userPos = data.user_tsne;
@@ -721,10 +926,7 @@ function connectWebSocket() {
         document.getElementById('inference-time').textContent = `${data.inference_ms}ms`;
       }
       STATE.sending = false;
-      // Schedule next frame only if not paused
-      if (!STATE.paused) {
-        setTimeout(sendFrame, 120);
-      }
+      if (!STATE.paused) setTimeout(sendFrame, 120);
     }
   };
 
@@ -741,19 +943,17 @@ function connectWebSocket() {
 }
 
 function sendFrame() {
-  // Guard: don't send if paused, not connected, or already waiting for a response
   if (STATE.paused || !STATE.connected || STATE.sending) return;
   STATE.sending = true;
-  const frameData = captureFrame();
   STATE.ws.send(JSON.stringify({
     type: 'frame',
-    data: frameData,
+    data: captureFrame(),
     top_k: 15,
   }));
 }
 
 function updateStatusBadge(connected) {
-  if (STATE.paused) return;  // don't overwrite paused badge
+  if (STATE.paused) return;
   const badge = document.getElementById('status-badge');
   badge.textContent = connected ? 'live' : 'disconnected';
   badge.className = connected ? '' : 'disconnected';
@@ -796,8 +996,7 @@ function updateTermList(topTerms) {
     item.querySelector('.term-cat').textContent = term.category;
     item.querySelector('.term-score').textContent = term.similarity.toFixed(3);
     const bar = item.querySelector('.term-bar');
-    const pct = maxSim > 0 ? (term.similarity / maxSim) * 100 : 0;
-    bar.style.width = pct + '%';
+    bar.style.width = (maxSim > 0 ? (term.similarity / maxSim) * 100 : 0) + '%';
     bar.style.background = term.color;
   });
 }
@@ -836,10 +1035,8 @@ function updateFairFace(fairface) {
     for (const [label, prob] of Object.entries(probs)) {
       const row = document.querySelector(`.ff-bar-row[data-attr="${attr}"][data-label="${label}"]`);
       if (!row) continue;
-      const bar = row.querySelector('.ff-bar');
-      const pct = row.querySelector('.ff-pct');
-      bar.style.width = (prob * 100) + '%';
-      pct.textContent = (prob * 100).toFixed(1) + '%';
+      row.querySelector('.ff-bar').style.width = (prob * 100) + '%';
+      row.querySelector('.ff-pct').textContent = (prob * 100).toFixed(1) + '%';
     }
   }
 }
@@ -859,6 +1056,8 @@ function buildCategoryToggles() {
     btn.style.color = info.color;
     btn.style.background = info.color + '15';
     btn.dataset.cat = cat;
+
+    if (!STATE.activeCategories.has(cat)) btn.classList.add('off');
 
     btn.addEventListener('click', () => {
       if (STATE.activeCategories.has(cat)) {
@@ -910,8 +1109,6 @@ function renderLoop() {
   const w = STATE.width;
   const h = STATE.height;
 
-  // When paused, only re-draw for the pulsing animation on the user dot
-  // (everything else is static, but we still need rAF for the pulse effect)
   ctx.clearRect(0, 0, w, h);
 
   const grad = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.max(w, h) * 0.6);
@@ -938,6 +1135,7 @@ function renderLoop() {
     if (!active.has(term.category)) continue;
     const [px, py] = tsneToPixel(term.x, term.y);
     const isTop = topWords.has(term.word);
+    const isCustom = term.category === 'Custom';
 
     if (isTop) {
       ctx.beginPath();
@@ -949,12 +1147,26 @@ function renderLoop() {
       ctx.fill();
     }
 
-    ctx.beginPath();
-    ctx.arc(px, py, isTop ? 5 : 2.5, 0, Math.PI * 2);
-    ctx.fillStyle = isTop ? term.color : term.color + '60';
-    ctx.fill();
+    // Custom words get a slightly larger dot and a diamond shape
+    if (isCustom) {
+      const r = isTop ? 6 : 4;
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(Math.PI / 4);
+      ctx.beginPath();
+      ctx.rect(-r * 0.75, -r * 0.75, r * 1.5, r * 1.5);
+      ctx.fillStyle = isTop ? term.color : term.color + '80';
+      ctx.fill();
+      ctx.restore();
+    } else {
+      ctx.beginPath();
+      ctx.arc(px, py, isTop ? 5 : 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = isTop ? term.color : term.color + '60';
+      ctx.fill();
+    }
   }
 
+  // Labels for top-K terms
   const placedLabels = [];
   const topTermsSorted = STATE.lastResult
     ? [...STATE.lastResult.top_terms]
@@ -989,10 +1201,7 @@ function renderLoop() {
           break;
         }
       }
-      if (!collision) {
-        bestPos = [lx, ly];
-        break;
-      }
+      if (!collision) { bestPos = [lx, ly]; break; }
     }
 
     if (bestPos) {
@@ -1009,18 +1218,15 @@ function renderLoop() {
     }
   }
 
-  // User dot — always animates even when paused (smoothing stops when paused)
+  // User dot
   if (STATE.lastResult) {
     if (!STATE.paused) {
-      // Only smooth-move when live
       smoothUserX += (STATE.userPos[0] - smoothUserX) * 0.15;
       smoothUserY += (STATE.userPos[1] - smoothUserY) * 0.15;
     }
 
     const [ux, uy] = tsneToPixel(smoothUserX, smoothUserY);
-
     const t = Date.now() / 1000;
-    // Slower, dimmer pulse when paused
     const pulseSpeed = STATE.paused ? 1.2 : 3;
     const pulseAmp = STATE.paused ? 0.1 : 0.3;
     const pulse = (1 - pulseAmp) + pulseAmp * Math.sin(t * pulseSpeed);
