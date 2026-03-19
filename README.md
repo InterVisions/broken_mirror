@@ -133,6 +133,10 @@ sobit-mirror/
 └── README.md
 ```
 
+## Known Limitations & Disclaimers
+
+- **Age label cultural relativity.** Age categories (e.g. young adult, middle-aged, elderly) are expressed in natural language anchored to life expectancy norms typical of high-income, Western contexts. For example, in Lesotho, where life expectancy sits around 54 years, a person aged 45 might reasonably be considered elderly, while the same label in a Western European context would typically apply to someone in their late 60s or beyond. This means age predictions should be interpreted with caution, and when working with participants from the Global South or migrant communities, the labels themselves may be worth questioning out loud as part of the audit.
+
 
 ## Credits
 
