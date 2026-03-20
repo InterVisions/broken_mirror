@@ -589,6 +589,45 @@
       <div id="category-toggles"></div>
     </div>
 
+    <!-- Session logging -->
+    <div class="panel-section">
+      <div class="panel-title">Session</div>
+      <div id="session-start-row" style="display:flex; gap:8px; align-items:center;">
+        <input
+          id="session-name-input"
+          type="text"
+          placeholder="Session name…"
+          maxlength="60"
+          autocomplete="off"
+          spellcheck="false"
+          style="flex:1; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12);
+                 border-radius:6px; padding:6px 10px; color:#fff; font-family:var(--font-mono);
+                 font-size:0.75rem; outline:none;"
+        />
+        <button id="session-start-btn"
+          style="padding:6px 12px; border-radius:6px; border:1px solid rgba(34,197,94,0.35);
+                 background:rgba(34,197,94,0.12); color:#22c55e; font-family:var(--font-mono);
+                 font-size:0.72rem; cursor:pointer; white-space:nowrap;">
+          Start
+        </button>
+      </div>
+      <div id="session-active-row" style="display:none; flex-direction:column; gap:8px;">
+        <div id="session-label"
+          style="font-family:var(--font-mono); font-size:0.68rem; color:#22c55e;">
+        </div>
+        <button id="session-export-btn"
+          style="padding:6px 12px; border-radius:6px; border:1px solid rgba(99,102,241,0.35);
+                 background:rgba(99,102,241,0.12); color:#a78bfa; font-family:var(--font-mono);
+                 font-size:0.72rem; cursor:pointer; text-align:left;">
+          ↓ Download CSV
+        </button>
+      </div>
+      <div id="session-status"
+        style="font-family:var(--font-mono); font-size:0.62rem; color:var(--text-dim);
+               margin-top:6px; min-height:14px;">
+      </div>
+    </div>
+
     <!-- Custom word input -->
     <div class="panel-section">
       <div class="panel-title">Add Custom Word</div>
@@ -674,6 +713,7 @@ async function init() {
   buildFairFaceContainer();
   setupCanvas();
   setupCustomWordUI();
+  setupSessionUI();
 
   setLoadingStatus('Starting camera…');
   await startWebcam();
@@ -699,6 +739,43 @@ async function init() {
 
 function setLoadingStatus(text) {
   document.getElementById('loading-status').textContent = text;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Session UI
+// ═══════════════════════════════════════════════════════════════════════════
+function setupSessionUI() {
+  document.getElementById('session-start-btn').addEventListener('click', startSession);
+  document.getElementById('session-name-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') startSession();
+  });
+  document.getElementById('session-export-btn').addEventListener('click', () => {
+    window.open('/api/export', '_blank');
+  });
+}
+
+async function startSession() {
+  const input = document.getElementById('session-name-input');
+  const status = document.getElementById('session-status');
+  const name = input.value.trim() || 'unnamed';
+
+  try {
+    const resp = await fetch('/api/session/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    const data = await resp.json();
+
+    // Swap rows
+    document.getElementById('session-start-row').style.display = 'none';
+    const activeRow = document.getElementById('session-active-row');
+    activeRow.style.display = 'flex';
+    document.getElementById('session-label').textContent = `● ${data.session}  ·  ${data.file}`;
+    status.textContent = '';
+  } catch (err) {
+    document.getElementById('session-status').textContent = 'Could not start session';
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

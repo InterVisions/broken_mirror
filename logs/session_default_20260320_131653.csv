@@ -1,0 +1,3 @@
+timestamp,session,word,category,tsne_x,tsne_y
+2026-03-20T13:17:18,default,test,Custom,0.1372,-0.1118
+2026-03-20T13:17:41,default,does this work,Custom,0.0259,0.1771

@@ -9,10 +9,12 @@ Usage:
 import argparse
 import asyncio
 import base64
+import csv
 import json
 import logging
 import time
-from io import BytesIO
+from datetime import datetime
+from io import BytesIO, StringIO
 from pathlib import Path
 
 import numpy as np
@@ -42,6 +44,27 @@ TSNE_COORDS = None           # (N, 2) numpy array — precomputed 2-D layout for
 MAX_LABELS = 20
 CLIP_BACKEND = "open_clip"   # or "openai_clip"
 args = None                  # parsed CLI args (set in main)
+
+# ── Session / CSV logging ─────────────────────────────────────────────────────
+SESSION_NAME = None          # set via POST /api/session/start
+CSV_PATH = None              # path to the active CSV file
+LOGS_DIR = Path(__file__).parent / "logs"   # overridable in main(), always valid
+LOGS_DIR.mkdir(exist_ok=True)
+
+
+def _auto_open_session(name: str = "default"):
+    """Open a CSV log immediately at startup so words are always recorded."""
+    global SESSION_NAME, CSV_PATH
+    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"session_{safe}_{timestamp}.csv"
+    CSV_PATH = LOGS_DIR / filename
+    SESSION_NAME = name
+    LOGS_DIR.mkdir(exist_ok=True)
+    CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(CSV_PATH, "w", newline="", encoding="utf-8") as f:
+        csv.DictWriter(f, fieldnames=CSV_COLUMNS).writeheader()
+    log.info(f"Auto-opened CSV log: {CSV_PATH}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -309,6 +332,79 @@ async def api_init():
     }
 
 
+# ── Session / CSV helpers ─────────────────────────────────────────────────────
+
+CSV_COLUMNS = ["timestamp", "session", "word", "category", "tsne_x", "tsne_y"]
+
+
+def open_csv(path: Path):
+    """Create the CSV file and write the header row."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
+        writer.writeheader()
+    log.info(f"CSV log opened at {path}")
+
+
+def append_csv(row: dict):
+    """Append one word entry to the active CSV. No-op if no session is active."""
+    if CSV_PATH is None:
+        return
+    with open(CSV_PATH, "a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
+        writer.writerow(row)
+
+
+class StartSessionRequest(BaseModel):
+    name: str = ""
+
+
+@app.post("/api/session/start")
+async def session_start(req: StartSessionRequest):
+    """Open a new CSV log file for this session."""
+    global SESSION_NAME, CSV_PATH
+
+    raw = req.name.strip() or "unnamed"
+    # Sanitise for use in filenames
+    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in raw)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"session_{safe}_{timestamp}.csv"
+    CSV_PATH = LOGS_DIR / filename
+    SESSION_NAME = raw
+
+    open_csv(CSV_PATH)
+
+    return {"status": "ok", "session": SESSION_NAME, "file": filename}
+
+
+@app.get("/api/session")
+async def session_info():
+    """Return current session state."""
+    return {
+        "active": SESSION_NAME is not None,
+        "session": SESSION_NAME,
+        "file": CSV_PATH.name if CSV_PATH else None,
+    }
+
+
+from fastapi.responses import StreamingResponse
+
+@app.get("/api/export")
+async def export_csv():
+    """Download the current session CSV. Returns 404 if no session is active."""
+    if CSV_PATH is None or not CSV_PATH.exists():
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="No active session or file not found.")
+
+    content = CSV_PATH.read_text(encoding="utf-8")
+    filename = CSV_PATH.name
+    return StreamingResponse(
+        iter([content]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 # ── Custom word endpoint ──────────────────────────────────────────────────────
 
 CUSTOM_COLOR = "#FFFFFF"
@@ -357,6 +453,16 @@ async def add_word(req: AddWordRequest):
         TAXONOMY["categories"][req.category] = {"color": req.color, "words": [word]}
 
     log.info(f"✓ Added '{word}' at t-SNE ({tsne_pos[0]:.3f}, {tsne_pos[1]:.3f})")
+
+    # Log to CSV if a session is active
+    append_csv({
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "session": SESSION_NAME or "",
+        "word": word,
+        "category": req.category,
+        "tsne_x": round(float(tsne_pos[0]), 4),
+        "tsne_y": round(float(tsne_pos[1]), 4),
+    })
 
     return {
         "status": "ok",
@@ -458,6 +564,9 @@ def main():
 
     TEXT_EMBEDDINGS, TEXT_LABELS, FAIRFACE_EMBEDDINGS = build_text_embeddings(TAXONOMY)
     TSNE_COORDS = compute_tsne(TEXT_EMBEDDINGS, perplexity=args.tsne_perplexity)
+
+    # Open a default CSV so words are logged even without pressing Start Session
+    _auto_open_session("default")
 
     import uvicorn
     log.info(f"Starting server on http://{args.host}:{args.port}")
