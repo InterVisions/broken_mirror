@@ -295,19 +295,45 @@ def process_frame(img: Image.Image, top_k: int = 15, categories: set = None) -> 
 def project_to_tsne(img_emb: torch.Tensor, categories: set = None) -> list:
     """
     Project the live user embedding into the UMAP 2D space for the current frame.
-    Uses fast weighted nearest-neighbour interpolation (not umap.transform) so it
-    can run on every frame without blocking inference.
-    Restricted to active categories if provided.
+    Projection mode is controlled by --projection CLI arg:
+      top1     (default) always follow the single closest term — clearest signal
+      softmax             weighted average with softmax temperature τ — sharper than raw cosine
+      weighted            weighted average with raw cosine similarities (original behaviour)
+      transform           use umap.transform() — accurate but slow, for powerful hardware only
     """
+    mode = args.projection if args else 'top1'
+
     sims = (img_emb @ TEXT_EMBEDDINGS.T).squeeze(0).cpu().numpy()
     if categories:
         candidate_idx = np.array([i for i, l in enumerate(TEXT_LABELS) if l["category"] in categories])
     else:
         candidate_idx = np.arange(len(sims))
+
+    if len(candidate_idx) == 0:
+        return [0.0, 0.0]
+
+    if mode == 'transform':
+        X = img_emb.cpu().numpy().astype(np.float32)
+        coords = UMAP_MODEL.transform(X)[0]
+        coords = (coords - UMAP_MEAN) / UMAP_SCALE
+        return [round(float(coords[0]), 4), round(float(coords[1]), 4)]
+
+    if mode == 'top1':
+        best = candidate_idx[np.argmax(sims[candidate_idx])]
+        pos = TSNE_COORDS[int(best)]
+        return [round(float(pos[0]), 4), round(float(pos[1]), 4)]
+
     k = min(10, len(candidate_idx))
     top_idx = candidate_idx[np.argsort(sims[candidate_idx])[::-1][:k]]
-    weights = sims[top_idx]
-    weights = np.maximum(weights, 0)
+
+    if mode == 'softmax':
+        tau = args.projection_tau if args else 0.1
+        logits = sims[top_idx] / tau
+        logits -= logits.max()  # numerical stability
+        weights = np.exp(logits)
+    else:  # weighted
+        weights = np.maximum(sims[top_idx], 0)
+
     w_sum = weights.sum()
     if w_sum < 1e-8:
         return [0.0, 0.0]
@@ -588,6 +614,11 @@ def parse_args():
                    help="Path to custom taxonomy JSON (default: config/sobit_taxonomy.json)")
     p.add_argument("--umap-neighbors", type=int, default=15,
                    help="UMAP n_neighbors parameter (default: 15)")
+    p.add_argument("--projection", default="top1",
+                   choices=["softmax", "weighted", "top1", "transform"],
+                   help="User dot projection mode (default: top1)")
+    p.add_argument("--projection-tau", type=float, default=0.1,
+                   help="Softmax temperature for projection; lower = sharper (default: 0.1)")
     return p.parse_args()
 
 
