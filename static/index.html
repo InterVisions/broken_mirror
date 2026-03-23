@@ -35,7 +35,7 @@
   /* ── Layout ──────────────────────────────────────── */
   #app {
     display: grid;
-    grid-template-columns: 1fr 340px;
+    grid-template-columns: 280px 1fr 300px;
     grid-template-rows: auto 1fr;
     height: 100vh;
     gap: 0;
@@ -78,13 +78,32 @@
 
   #webcam-container {
     position: relative;
-    width: 120px;
-    height: 90px;
+    width: 100%;
+    aspect-ratio: 4 / 3;
     border-radius: 10px;
     overflow: hidden;
     border: 2px solid var(--accent);
     box-shadow: 0 0 20px var(--glow);
     transition: border-color 0.3s ease;
+  }
+
+  #camera-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  /* ── Left panel ──────────────────────────────────── */
+  #left-panel {
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border);
+    background: var(--bg-panel);
+    backdrop-filter: blur(20px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.1) transparent;
   }
 
   #webcam-container.paused {
@@ -150,6 +169,8 @@
     font-family: var(--font-mono);
     font-size: 0.65rem;
     color: var(--text-dim);
+    min-width: 4.5em;
+    display: inline-block;
   }
 
   /* ── Pause Button ────────────────────────────────── */
@@ -537,27 +558,19 @@
 <!-- Main app -->
 <div id="app">
 
-  <!-- Header with webcam -->
+  <!-- Header: title only -->
   <div id="header">
     <div>
       <h1>InterVisions - So-B-IT Broken Mirror</h1>
       <span class="subtitle">Interactive CLIP Bias Audit · What does the model see?</span>
     </div>
-    <div id="header-right">
-      <span id="inference-time"></span>
+  </div>
 
-      <button id="pause-btn" title="Freeze frame (Space)">
-        <svg id="pause-icon" viewBox="0 0 12 12" fill="currentColor">
-          <rect x="1.5" y="1" width="3.5" height="10" rx="1"/>
-          <rect x="7" y="1" width="3.5" height="10" rx="1"/>
-        </svg>
-        <svg id="play-icon" viewBox="0 0 12 12" fill="currentColor" style="display:none">
-          <path d="M2 1.5 L10 6 L2 10.5 Z"/>
-        </svg>
-        <span id="pause-btn-label">Freeze</span>
-      </button>
+  <!-- Left panel: camera + controls + session + fairface -->
+  <div id="left-panel">
 
-      <span id="status-badge" class="disconnected">disconnected</span>
+    <!-- Camera -->
+    <div class="panel-section">
       <div id="webcam-container">
         <video id="webcam-video" autoplay muted playsinline></video>
         <canvas id="capture-canvas" style="display:none"></canvas>
@@ -566,28 +579,20 @@
           <svg viewBox="0 0 24 24"><rect x="5" y="3" width="4" height="18" rx="1.5"/><rect x="15" y="3" width="4" height="18" rx="1.5"/></svg>
         </div>
       </div>
-    </div>
-  </div>
-
-  <!-- t-SNE visualization -->
-  <div id="main">
-    <canvas id="tsne-canvas"></canvas>
-    <div id="freeze-banner">⏸ Frozen — press Space or click Freeze to resume</div>
-  </div>
-
-  <!-- Right sidebar -->
-  <div id="sidebar">
-
-    <!-- FairFace zero-shot -->
-    <div class="panel-section">
-      <div class="panel-title">Zero-Shot Classification (FairFace)</div>
-      <div id="fairface-container"></div>
-    </div>
-
-    <!-- Category filters -->
-    <div class="panel-section">
-      <div class="panel-title">Category Filters</div>
-      <div id="category-toggles"></div>
+      <div id="camera-controls">
+        <button id="pause-btn" title="Freeze frame (Space)">
+          <svg id="pause-icon" viewBox="0 0 12 12" fill="currentColor">
+            <rect x="1.5" y="1" width="3.5" height="10" rx="1"/>
+            <rect x="7" y="1" width="3.5" height="10" rx="1"/>
+          </svg>
+          <svg id="play-icon" viewBox="0 0 12 12" fill="currentColor" style="display:none">
+            <path d="M2 1.5 L10 6 L2 10.5 Z"/>
+          </svg>
+          <span id="pause-btn-label">Freeze</span>
+        </button>
+        <span id="status-badge" class="disconnected">disconnected</span>
+        <span id="inference-time"></span>
+      </div>
     </div>
 
     <!-- Session logging -->
@@ -627,6 +632,29 @@
         style="font-family:var(--font-mono); font-size:0.62rem; color:var(--text-dim);
                margin-top:6px; min-height:14px;">
       </div>
+    </div>
+
+    <!-- FairFace zero-shot -->
+    <div class="panel-section">
+      <div class="panel-title">Zero-Shot Classification (FairFace)</div>
+      <div id="fairface-container"></div>
+    </div>
+
+  </div>
+
+  <!-- t-SNE visualization -->
+  <div id="main">
+    <canvas id="tsne-canvas"></canvas>
+    <div id="freeze-banner">⏸ Frozen — press Space or click Freeze to resume</div>
+  </div>
+
+  <!-- Right sidebar: So-B-IT -->
+  <div id="sidebar">
+
+    <!-- Category filters -->
+    <div class="panel-section">
+      <div class="panel-title">Category Filters</div>
+      <div id="category-toggles"></div>
     </div>
 
     <!-- Custom word input -->
