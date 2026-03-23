@@ -274,7 +274,7 @@ def process_frame(img: Image.Image, top_k: int = 15, categories: set = None) -> 
             for label, p in zip(data["labels"], probs)
         }
 
-    user_tsne = project_to_tsne(img_emb)
+    user_tsne = project_to_tsne(img_emb, categories=categories)
     elapsed = time.time() - t0
 
     return {
@@ -285,10 +285,14 @@ def process_frame(img: Image.Image, top_k: int = 15, categories: set = None) -> 
     }
 
 
-def project_to_tsne(img_emb: torch.Tensor) -> list:
+def project_to_tsne(img_emb: torch.Tensor, categories: set = None) -> list:
     sims = (img_emb @ TEXT_EMBEDDINGS.T).squeeze(0).cpu().numpy()
-    k = min(10, len(sims))
-    top_idx = np.argsort(sims)[::-1][:k]
+    if categories:
+        candidate_idx = np.array([i for i, l in enumerate(TEXT_LABELS) if l["category"] in categories])
+    else:
+        candidate_idx = np.arange(len(sims))
+    k = min(10, len(candidate_idx))
+    top_idx = candidate_idx[np.argsort(sims[candidate_idx])[::-1][:k]]
     weights = sims[top_idx]
     weights = np.maximum(weights, 0)
     w_sum = weights.sum()
