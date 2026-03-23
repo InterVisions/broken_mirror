@@ -239,13 +239,21 @@ def interpolate_tsne_position(new_emb: torch.Tensor) -> np.ndarray:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @torch.no_grad()
-def process_frame(img: Image.Image, top_k: int = 15) -> dict:
+def process_frame(img: Image.Image, top_k: int = 15, categories: set = None) -> dict:
     t0 = time.time()
 
     img_emb = encode_image_tensor(img)  # (1, D)
     sims = (img_emb @ TEXT_EMBEDDINGS.T).squeeze(0).cpu().numpy()  # (N,)
 
-    top_idx = np.argsort(sims)[::-1][:top_k]
+    # Filter candidate indices to active categories (if provided)
+    if categories:
+        candidate_idx = [i for i, l in enumerate(TEXT_LABELS) if l["category"] in categories]
+    else:
+        candidate_idx = list(range(len(TEXT_LABELS)))
+
+    candidate_idx = np.array(candidate_idx)
+    top_idx = candidate_idx[np.argsort(sims[candidate_idx])[::-1][:top_k]]
+
     top_terms = []
     for idx in top_idx:
         idx = int(idx)
@@ -510,7 +518,8 @@ async def websocket_endpoint(ws: WebSocket):
                 img = Image.open(BytesIO(img_bytes)).convert("RGB")
 
                 top_k = msg.get("top_k", MAX_LABELS)
-                result = process_frame(img, top_k=top_k)
+                categories = set(msg["categories"]) if msg.get("categories") else None
+                result = process_frame(img, top_k=top_k, categories=categories)
                 result["type"] = "result"
                 await ws.send_text(json.dumps(result))
 

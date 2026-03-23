@@ -1041,6 +1041,7 @@ function sendFrame() {
     type: 'frame',
     data: captureFrame(),
     top_k: 15,
+    categories: [...STATE.activeCategories],
   }));
 }
 
@@ -1057,7 +1058,7 @@ function updateStatusBadge(connected) {
 // ═══════════════════════════════════════════════════════════════════════════
 function updateTermList(topTerms) {
   const list = document.getElementById('term-list');
-  const filtered = topTerms.filter(t => STATE.activeCategories.has(t.category));
+  const filtered = topTerms;
 
   while (list.children.length > filtered.length) list.removeChild(list.lastChild);
 
@@ -1159,6 +1160,8 @@ function buildCategoryToggles() {
         STATE.activeCategories.add(cat);
         btn.classList.remove('off');
       }
+      STATE.sending = false;
+      sendFrame();
     });
 
     container.appendChild(btn);
