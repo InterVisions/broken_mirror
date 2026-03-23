@@ -909,8 +909,12 @@ async function clearAllCustomWords() {
   setTimeout(() => setCustomStatus('', 'var(--text-dim)'), 2000);
 }
 
-function removeCustomWord(word) {
-  // Remove from local state (no server endpoint for individual removal — keep it simple)
+async function removeCustomWord(word) {
+  try {
+    await fetch(`/api/custom_words/${encodeURIComponent(word)}`, { method: 'DELETE' });
+  } catch (_) {
+    // Best-effort — clean up client state regardless
+  }
   STATE.terms = STATE.terms.filter(t => !(t.word === word && t.category === 'Custom'));
   STATE.customWords = STATE.customWords.filter(w => w !== word);
   renderCustomChips();

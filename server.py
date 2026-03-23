@@ -497,6 +497,26 @@ async def add_word(req: AddWordRequest):
     }
 
 
+@app.delete("/api/custom_words/{word}")
+async def remove_custom_word(word: str):
+    """Remove a single custom word from the session by name."""
+    global TEXT_EMBEDDINGS, TEXT_LABELS, TSNE_COORDS
+
+    keep = [i for i, l in enumerate(TEXT_LABELS) if not (l["word"] == word and l["category"] == "Custom")]
+    if len(keep) == len(TEXT_LABELS):
+        return {"status": "not_found", "word": word}
+
+    TEXT_EMBEDDINGS = TEXT_EMBEDDINGS[keep]
+    TEXT_LABELS = [TEXT_LABELS[i] for i in keep]
+    TSNE_COORDS = TSNE_COORDS[keep]
+
+    if "Custom" in TAXONOMY["categories"] and word in TAXONOMY["categories"]["Custom"]["words"]:
+        TAXONOMY["categories"]["Custom"]["words"].remove(word)
+
+    log.info(f"Removed custom word: '{word}'")
+    return {"status": "ok", "word": word}
+
+
 @app.delete("/api/custom_words")
 async def clear_custom_words():
     """Remove all custom words from the session (does not affect So-B-IT terms)."""
