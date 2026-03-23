@@ -561,6 +561,7 @@
       <div id="webcam-container">
         <video id="webcam-video" autoplay muted playsinline></video>
         <canvas id="capture-canvas" style="display:none"></canvas>
+        <canvas id="freeze-canvas" style="display:none; position:absolute; inset:0; width:100%; height:100%; object-fit:cover; transform:scaleX(-1);"></canvas>
         <div id="webcam-pause-overlay">
           <svg viewBox="0 0 24 24"><rect x="5" y="3" width="4" height="18" rx="1.5"/><rect x="15" y="3" width="4" height="18" rx="1.5"/></svg>
         </div>
@@ -915,11 +916,25 @@ function setCustomStatus(msg, color) {
 // ═══════════════════════════════════════════════════════════════════════════
 function togglePause() {
   STATE.paused = !STATE.paused;
-  applyPauseUI();
-  if (!STATE.paused) {
+
+  const video = document.getElementById('webcam-video');
+  const freezeCanvas = document.getElementById('freeze-canvas');
+
+  if (STATE.paused) {
+    // Capture the current video frame into the freeze canvas
+    freezeCanvas.width = video.videoWidth || video.offsetWidth;
+    freezeCanvas.height = video.videoHeight || video.offsetHeight;
+    freezeCanvas.getContext('2d').drawImage(video, 0, 0, freezeCanvas.width, freezeCanvas.height);
+    freezeCanvas.style.display = 'block';
+    video.style.visibility = 'hidden';
+  } else {
+    freezeCanvas.style.display = 'none';
+    video.style.visibility = 'visible';
     STATE.sending = false;
     sendFrame();
   }
+
+  applyPauseUI();
 }
 
 function applyPauseUI() {
