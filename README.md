@@ -4,8 +4,11 @@
 
 Participants see their own webcam feed while the app shows, in real time:
 - The **closest So-B-IT taxonomy terms** (374 bias-relevant words across 9 categories) that CLIP associates with their face
-- A **t-SNE scatter plot** of all So-B-IT term embeddings, with their face embedding shown as a moving star
+- A **UMAP scatter plot** of all So-B-IT term embeddings, with their face embedding shown as a moving star
 - **Zero-shot FairFace predictions** (race, gender, age probability distributions via softmax)
+- **Custom words** — participants can add their own words beyond the So-B-IT taxonomy and see them embedded live in the UMAP space
+- **Session logging** — word interactions are recorded to CSV for later analysis
+- **Freeze** — pause the camera stream on the last frame to discuss a result without distraction
 
 Change your expression, put on a hat, move the camera — and watch the model's perception shift in real time.
 
@@ -17,22 +20,25 @@ Change your expression, put on a hat, move the camera — and watch the model's 
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  Browser (fullscreen)                                   │
-│  ┌──────────┐  ┌───────────────┐  ┌──────────────────┐ │
-│  │ Webcam   │  │ t-SNE Canvas  │  │ Sidebar          │ │
-│  │ (small)  │  │ (animated)    │  │ - Top-K terms    │ │
-│  └────┬─────┘  └───────────────┘  │ - FairFace bars  │ │
-│       │ JPEG frames via WebSocket  │ - Category toggles│ │
-│       ▼                           └──────────────────┘ │
-├─────────────────────────────────────────────────────────┤
-│  FastAPI + WebSocket Server (Python)                    │
-│  ┌──────────────┐  ┌────────────────────────────────┐  │
-│  │ CLIP Model   │  │ Precomputed:                   │  │
-│  │ (PyTorch/GPU)│  │ - So-B-IT text embeddings      │  │
-│  │              │  │ - t-SNE 2D coordinates          │  │
-│  │ encode_image │  │ - FairFace label embeddings     │  │
-│  └──────────────┘  └────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────┘
+│  Browser (fullscreen)                                          │
+│  ┌─────────────────┐  ┌────────────────┐  ┌───────────────┐  │
+│  │ Left panel      │  │ UMAP Canvas    │  │ Right panel   │  │
+│  │ - Webcam feed   │  │ (animated)     │  │ - Cat. filters│  │
+│  │ - Freeze btn    │  │                │  │ - Custom words│  │
+│  │ - Session log   │  │                │  │ - Top-K terms │  │
+│  │ - FairFace bars │  └────────────────┘  └───────────────┘  │
+│  └────────┬────────┘                                          │
+│           │ JPEG frames via WebSocket                         │
+│           ▼                                                   │
+├───────────────────────────────────────────────────────────────┤
+│  FastAPI + WebSocket Server (Python)                          │
+│  ┌──────────────┐  ┌──────────────────────────────────────┐  │
+│  │ CLIP Model   │  │ Precomputed at startup:              │  │
+│  │ (PyTorch/GPU)│  │ - So-B-IT text embeddings            │  │
+│  │              │  │ - UMAP 2D coordinates + fitted model │  │
+│  │ encode_image │  │ - FairFace label embeddings          │  │
+│  └──────────────┘  └──────────────────────────────────────┘  │
+└───────────────────────────────────────────────────────────────┘
 ```
 
 ## Quick Start
@@ -78,7 +84,9 @@ Allow camera access when prompted.
 | `--max-labels` | `20` | Maximum number of text labels shown on the t-SNE plot |
 | `--top-k` | `15` | Default number of top terms returned per frame |
 | `--taxonomy` | `config/sobit_taxonomy.json` | Path to custom taxonomy JSON |
-| `--tsne-perplexity` | `30` | t-SNE perplexity parameter |
+| `--umap-neighbors` | `15` | UMAP `n_neighbors` parameter — higher = more global structure |
+| `--projection` | `top1` | User dot projection mode: `top1` (follow closest term), `softmax` (temperature-weighted average), `weighted` (cosine-weighted average), `transform` (exact via `umap.transform`, slow) |
+| `--projection-tau` | `0.1` | Softmax temperature for `softmax` projection mode; lower = sharper |
 
 ---
 
@@ -102,7 +110,7 @@ Edit `config/sobit_taxonomy.json` to add/remove words or categories. The format 
 }
 ```
 
-The t-SNE layout and text embeddings are recomputed at startup when the taxonomy changes.
+The UMAP layout and text embeddings are recomputed at startup when the taxonomy changes.
 
 ---
 
