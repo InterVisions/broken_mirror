@@ -240,6 +240,12 @@ def interpolate_tsne_position(new_emb: torch.Tensor) -> np.ndarray:
 
 @torch.no_grad()
 def process_frame(img: Image.Image, top_k: int = 15, categories: set = None) -> dict:
+    """
+    Given a webcam frame (PIL), return:
+    - top_k closest So-B-IT terms with similarity scores (filtered to active categories)
+    - zero-shot FairFace classification probabilities
+    - user embedding projected to t-SNE space
+    """
     t0 = time.time()
 
     img_emb = encode_image_tensor(img)  # (1, D)
@@ -286,6 +292,11 @@ def process_frame(img: Image.Image, top_k: int = 15, categories: set = None) -> 
 
 
 def project_to_tsne(img_emb: torch.Tensor, categories: set = None) -> list:
+    """
+    Project user embedding into the precomputed t-SNE space.
+    Uses weighted average of K nearest text embedding positions,
+    restricted to active categories if provided.
+    """
     sims = (img_emb @ TEXT_EMBEDDINGS.T).squeeze(0).cpu().numpy()
     if categories:
         candidate_idx = np.array([i for i, l in enumerate(TEXT_LABELS) if l["category"] in categories])
@@ -539,14 +550,22 @@ async def websocket_endpoint(ws: WebSocket):
 
 def parse_args():
     p = argparse.ArgumentParser(description="InterVisions So-B-IT Broken Mirror — CLIP Bias Audit Tool")
-    p.add_argument("--model", default="ViT-B/32")
-    p.add_argument("--device", default="auto")
-    p.add_argument("--port", type=int, default=8765)
-    p.add_argument("--host", default="0.0.0.0")
-    p.add_argument("--max-labels", type=int, default=20)
-    p.add_argument("--top-k", type=int, default=15)
-    p.add_argument("--taxonomy", default=None)
-    p.add_argument("--tsne-perplexity", type=int, default=30)
+    p.add_argument("--model", default="ViT-B/32",
+                   help="CLIP model name (default: ViT-B/32)")
+    p.add_argument("--device", default="auto",
+                   help="Device: cuda, cpu, or auto (default: auto)")
+    p.add_argument("--port", type=int, default=8765,
+                   help="Server port (default: 8765)")
+    p.add_argument("--host", default="0.0.0.0",
+                   help="Server host (default: 0.0.0.0)")
+    p.add_argument("--max-labels", type=int, default=20,
+                   help="Max number of labels to show in the t-SNE plot (default: 20)")
+    p.add_argument("--top-k", type=int, default=15,
+                   help="Default number of top terms returned (default: 15)")
+    p.add_argument("--taxonomy", default=None,
+                   help="Path to custom taxonomy JSON (default: config/sobit_taxonomy.json)")
+    p.add_argument("--tsne-perplexity", type=int, default=30,
+                   help="t-SNE perplexity (default: 30)")
     return p.parse_args()
 
 
