@@ -4,6 +4,7 @@ open-clip-torch>=2.20.0
 Pillow>=9.0
 numpy>=1.24
 scikit-learn>=1.2
+umap-learn>=0.5
 fastapi>=0.100
 uvicorn[standard]>=0.22
 websockets>=11.0

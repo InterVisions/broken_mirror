@@ -25,7 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from PIL import Image
 from pydantic import BaseModel
-from sklearn.manifold import TSNE
+import umap
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -41,6 +41,9 @@ TEXT_EMBEDDINGS = None       # (N, D) tensor — one per So-B-IT term
 TEXT_LABELS = []             # list of dicts: {word, category, color}
 FAIRFACE_EMBEDDINGS = {}     # key -> (M, D) tensor for zero-shot classification
 TSNE_COORDS = None           # (N, 2) numpy array — precomputed 2-D layout for terms
+UMAP_MODEL  = None           # fitted UMAP instance — used to project new custom words
+UMAP_MEAN   = None           # mean used to normalise UMAP output to [-1, 1]
+UMAP_SCALE  = None           # scale used to normalise UMAP output to [-1, 1]
 MAX_LABELS = 20
 CLIP_BACKEND = "open_clip"   # or "openai_clip"
 args = None                  # parsed CLI args (set in main)
@@ -202,36 +205,34 @@ def build_text_embeddings(taxonomy: dict):
     return text_emb, labels, ff_emb
 
 
-def compute_tsne(embeddings: torch.Tensor, perplexity: int = 30, seed: int = 42) -> np.ndarray:
-    """Run t-SNE on the text embeddings → (N, 2) coordinates."""
-    log.info("Computing t-SNE layout …")
+def compute_umap(embeddings: torch.Tensor, n_neighbors: int = 15, seed: int = 42) -> np.ndarray:
+    """Fit UMAP on the text embeddings → (N, 2) coordinates. Stores the fitted model globally."""
+    global UMAP_MODEL, UMAP_MEAN, UMAP_SCALE
+    log.info("Computing UMAP layout …")
     X = embeddings.cpu().numpy().astype(np.float32)
-    n = X.shape[0]
-    perp = min(perplexity, max(5, n // 4))
-    tsne = TSNE(n_components=2, perplexity=perp, random_state=seed, max_iter=1000)
-    coords = tsne.fit_transform(X)
-    coords -= coords.mean(axis=0)
-    scale = np.abs(coords).max()
-    if scale > 0:
-        coords /= scale
-    log.info(f"✓ t-SNE done, shape {coords.shape}")
+    UMAP_MODEL = umap.UMAP(
+        n_components=2, n_neighbors=n_neighbors, min_dist=0.1,
+        metric='cosine', random_state=seed, n_jobs=1
+    )
+    coords = UMAP_MODEL.fit_transform(X)
+    UMAP_MEAN = coords.mean(axis=0)
+    coords = coords - UMAP_MEAN
+    UMAP_SCALE = np.abs(coords).max()
+    if UMAP_SCALE > 0:
+        coords /= UMAP_SCALE
+    log.info(f"✓ UMAP done, shape {coords.shape}")
     return coords
 
 
-def interpolate_tsne_position(new_emb: torch.Tensor) -> np.ndarray:
+def project_new_term(new_emb: torch.Tensor) -> np.ndarray:
     """
-    Project a new embedding into the existing t-SNE space via weighted
-    nearest-neighbour interpolation. Same logic used for the user dot.
+    Project a new custom word embedding into the existing UMAP space using
+    the fitted model. Applies the same normalisation as the original layout.
     """
-    sims = (new_emb @ TEXT_EMBEDDINGS.T).squeeze(0).cpu().numpy()
-    k = min(10, len(sims))
-    top_idx = np.argsort(sims)[::-1][:k]
-    weights = np.maximum(sims[top_idx], 0)
-    w_sum = weights.sum()
-    if w_sum < 1e-8:
-        return np.array([0.0, 0.0])
-    weights /= w_sum
-    return (TSNE_COORDS[top_idx] * weights[:, None]).sum(axis=0)
+    X = new_emb.cpu().numpy().astype(np.float32)
+    coords = UMAP_MODEL.transform(X)[0]
+    coords = (coords - UMAP_MEAN) / UMAP_SCALE
+    return coords
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -293,9 +294,10 @@ def process_frame(img: Image.Image, top_k: int = 15, categories: set = None) -> 
 
 def project_to_tsne(img_emb: torch.Tensor, categories: set = None) -> list:
     """
-    Project user embedding into the precomputed t-SNE space.
-    Uses weighted average of K nearest text embedding positions,
-    restricted to active categories if provided.
+    Project the live user embedding into the UMAP 2D space for the current frame.
+    Uses fast weighted nearest-neighbour interpolation (not umap.transform) so it
+    can run on every frame without blocking inference.
+    Restricted to active categories if provided.
     """
     sims = (img_emb @ TEXT_EMBEDDINGS.T).squeeze(0).cpu().numpy()
     if categories:
@@ -460,8 +462,8 @@ async def add_word(req: AddWordRequest):
     log.info(f"Embedding custom word: '{word}' (prompt: '{prompt}')")
     new_emb = encode_texts([prompt])  # (1, D)
 
-    # Interpolate position in existing t-SNE space
-    tsne_pos = interpolate_tsne_position(new_emb)
+    # Project into existing UMAP space using the fitted model
+    tsne_pos = project_new_term(new_emb)
 
     # Append to global tensors / lists — thread-safe enough for a workshop context
     TEXT_EMBEDDINGS = torch.cat([TEXT_EMBEDDINGS, new_emb], dim=0)
@@ -584,14 +586,15 @@ def parse_args():
                    help="Default number of top terms returned (default: 15)")
     p.add_argument("--taxonomy", default=None,
                    help="Path to custom taxonomy JSON (default: config/sobit_taxonomy.json)")
-    p.add_argument("--tsne-perplexity", type=int, default=30,
-                   help="t-SNE perplexity (default: 30)")
+    p.add_argument("--umap-neighbors", type=int, default=15,
+                   help="UMAP n_neighbors parameter (default: 15)")
     return p.parse_args()
 
 
 def main():
     global MODEL, PREPROCESS, TOKENIZER, DEVICE, TAXONOMY
     global TEXT_EMBEDDINGS, TEXT_LABELS, FAIRFACE_EMBEDDINGS, TSNE_COORDS
+    global UMAP_MODEL, UMAP_MEAN, UMAP_SCALE
     global MAX_LABELS, args
 
     args = parse_args()
@@ -615,7 +618,7 @@ def main():
         TAXONOMY["categories"]["Custom"] = {"color": CUSTOM_COLOR, "words": []}
 
     TEXT_EMBEDDINGS, TEXT_LABELS, FAIRFACE_EMBEDDINGS = build_text_embeddings(TAXONOMY)
-    TSNE_COORDS = compute_tsne(TEXT_EMBEDDINGS, perplexity=args.tsne_perplexity)
+    TSNE_COORDS = compute_umap(TEXT_EMBEDDINGS, n_neighbors=args.umap_neighbors)
 
     # Open a default CSV so words are logged even without pressing Start Session
     _auto_open_session("default")
