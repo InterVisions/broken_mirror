@@ -357,6 +357,11 @@ async def index():
     return FileResponse(str(STATIC_DIR / "index.html"))
 
 
+@app.get("/favicon.ico")
+async def favicon():
+    return FileResponse(str(STATIC_DIR / "logo.png"))
+
+
 @app.get("/api/init")
 async def api_init():
     """Return taxonomy metadata, t-SNE coords, and config for the frontend."""

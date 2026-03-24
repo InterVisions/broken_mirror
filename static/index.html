@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>InterVisions - So-B-IT Broken Mirror — What Does the Model See?</title>
+<link rel="icon" type="image/png" href="/static/logo.png">
 <style>
   @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Space+Grotesk:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500;700&display=swap');
 
@@ -46,12 +47,20 @@
     grid-column: 1 / -1;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
+    gap: 16px;
     padding: 12px 24px;
     border-bottom: 1px solid var(--border);
     background: var(--bg-panel);
     backdrop-filter: blur(20px);
     z-index: 10;
+  }
+
+  #header-logo {
+    height: 52px;
+    width: auto;
+    object-fit: contain;
+    flex-shrink: 0;
   }
 
   #header h1 {
@@ -560,6 +569,7 @@
 
   <!-- Header: title only -->
   <div id="header">
+    <img src="/static/logo.png" id="header-logo" alt="InterVisions logo">
     <div>
       <h1>InterVisions - So-B-IT Broken Mirror</h1>
       <span class="subtitle">Interactive CLIP Bias Audit · What does the model see?</span>
