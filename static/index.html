@@ -9,15 +9,15 @@
   @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Space+Grotesk:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500;700&display=swap');
 
   :root {
-    --bg: #0a0a0f;
-    --bg-panel: rgba(15, 15, 25, 0.85);
-    --bg-card: rgba(20, 20, 35, 0.9);
-    --text: #e8e8f0;
+    --bg: #f0f0f5;
+    --bg-panel: rgba(248, 248, 252, 0.95);
+    --bg-card: rgba(238, 238, 248, 0.97);
+    --text: #1e1e2e;
     --text-dim: #6b6b80;
-    --text-bright: #ffffff;
-    --accent: #6366f1;
-    --glow: rgba(99, 102, 241, 0.3);
-    --border: rgba(255, 255, 255, 0.06);
+    --text-bright: #0a0a15;
+    --accent: #4f46e5;
+    --glow: rgba(79, 70, 229, 0.18);
+    --border: rgba(0, 0, 0, 0.09);
     --font-mono: 'JetBrains Mono', monospace;
     --font-display: 'Space Grotesk', sans-serif;
     --font-body: 'DM Sans', sans-serif;
@@ -112,7 +112,7 @@
     backdrop-filter: blur(20px);
     overflow-y: auto;
     scrollbar-width: thin;
-    scrollbar-color: rgba(255,255,255,0.1) transparent;
+    scrollbar-color: rgba(0,0,0,0.12) transparent;
   }
 
   #webcam-container.paused {
@@ -192,8 +192,8 @@
     font-weight: 500;
     padding: 6px 14px;
     border-radius: 20px;
-    border: 1px solid rgba(255,255,255,0.15);
-    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(0,0,0,0.14);
+    background: rgba(0,0,0,0.04);
     color: var(--text);
     cursor: pointer;
     transition: all 0.2s ease;
@@ -202,8 +202,8 @@
   }
 
   #pause-btn:hover {
-    background: rgba(255,255,255,0.1);
-    border-color: rgba(255,255,255,0.25);
+    background: rgba(0,0,0,0.08);
+    border-color: rgba(0,0,0,0.22);
   }
 
   #pause-btn.is-paused {
@@ -264,7 +264,7 @@
     backdrop-filter: blur(20px);
     overflow-y: auto;
     scrollbar-width: thin;
-    scrollbar-color: rgba(255,255,255,0.1) transparent;
+    scrollbar-color: rgba(0,0,0,0.12) transparent;
   }
 
   .panel-section {
@@ -297,12 +297,12 @@
     gap: 10px;
     padding: 6px 10px;
     border-radius: 6px;
-    background: rgba(255, 255, 255, 0.02);
+    background: rgba(0, 0, 0, 0.03);
     transition: all 0.3s ease;
     font-size: 0.82rem;
   }
 
-  .term-item:hover { background: rgba(255, 255, 255, 0.05); }
+  .term-item:hover { background: rgba(0, 0, 0, 0.06); }
 
   .term-dot { width: 8px; height: 8px; border-radius: 50%; }
 
@@ -322,7 +322,7 @@
   .term-bar-bg {
     grid-column: 1 / -1;
     height: 2px;
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(0, 0, 0, 0.09);
     border-radius: 1px;
     overflow: hidden;
   }
@@ -364,7 +364,7 @@
   .ff-bar-bg {
     flex: 1;
     height: 10px;
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(0, 0, 0, 0.09);
     border-radius: 3px;
     overflow: hidden;
   }
@@ -403,11 +403,11 @@
 
   #custom-word-input {
     flex: 1;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(0, 0, 0, 0.04);
+    border: 1px solid rgba(0, 0, 0, 0.12);
     border-radius: 6px;
     padding: 6px 10px;
-    color: #fff;
+    color: var(--text);
     font-family: var(--font-mono);
     font-size: 0.75rem;
     outline: none;
@@ -467,8 +467,8 @@
     font-size: 0.62rem;
     padding: 2px 8px 2px 8px;
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.07);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(0, 0, 0, 0.05);
+    border: 1px solid rgba(0, 0, 0, 0.11);
     color: var(--text);
   }
 
@@ -616,8 +616,8 @@
           maxlength="60"
           autocomplete="off"
           spellcheck="false"
-          style="flex:1; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12);
-                 border-radius:6px; padding:6px 10px; color:#fff; font-family:var(--font-mono);
+          style="flex:1; background:rgba(0,0,0,0.04); border:1px solid rgba(0,0,0,0.12);
+                 border-radius:6px; padding:6px 10px; color:var(--text); font-family:var(--font-mono);
                  font-size:0.75rem; outline:none;"
         />
         <button id="session-start-btn"
@@ -1249,12 +1249,12 @@ function renderLoop() {
   ctx.clearRect(0, 0, w, h);
 
   const grad = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.max(w, h) * 0.6);
-  grad.addColorStop(0, '#0f0f1a');
-  grad.addColorStop(1, '#0a0a0f');
+  grad.addColorStop(0, '#eeeef5');
+  grad.addColorStop(1, '#e4e4ef');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, w, h);
 
-  ctx.strokeStyle = 'rgba(255,255,255,0.02)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.04)';
   ctx.lineWidth = 1;
   const gridStep = 80;
   for (let x = gridStep; x < w; x += gridStep) {
@@ -1370,7 +1370,7 @@ function renderLoop() {
 
     const outerAlpha = STATE.paused ? 0.12 : 0.25;
     const userGlow = ctx.createRadialGradient(ux, uy, 0, ux, uy, 35 * pulse);
-    userGlow.addColorStop(0, `rgba(255, 255, 255, ${outerAlpha})`);
+    userGlow.addColorStop(0, `rgba(79, 70, 229, ${outerAlpha * 2})`);
     userGlow.addColorStop(0.5, STATE.paused ? 'rgba(245, 158, 11, 0.08)' : 'rgba(99, 102, 241, 0.1)');
     userGlow.addColorStop(1, 'transparent');
     ctx.beginPath();
@@ -1379,14 +1379,14 @@ function renderLoop() {
     ctx.fill();
 
     drawStar(ctx, ux, uy, 8, 14, 5);
-    ctx.fillStyle = STATE.paused ? 'rgba(255,255,255,0.55)' : '#ffffff';
+    ctx.fillStyle = STATE.paused ? 'rgba(245,158,11,0.85)' : '#4f46e5';
     ctx.fill();
     ctx.strokeStyle = STATE.paused ? '#f59e0b' : '#6366f1';
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
     ctx.font = 'bold 13px "Space Grotesk", sans-serif';
-    ctx.fillStyle = STATE.paused ? 'rgba(255,255,255,0.55)' : '#ffffff';
+    ctx.fillStyle = STATE.paused ? 'rgba(245,158,11,0.85)' : '#4f46e5';
     ctx.fillText('YOU', ux + 18, uy + 1);
   }
 
