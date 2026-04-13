@@ -553,6 +553,36 @@
     opacity: 0.5;
     z-index: 5;
   }
+
+  /* ── Language Toggle ─────────────────────────────── */
+  #lang-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+  }
+
+  .lang-btn {
+    padding: 4px 10px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 500;
+    transition: all 0.2s;
+    letter-spacing: 0.06em;
+  }
+
+  .lang-btn:hover { color: var(--text); border-color: rgba(0,0,0,0.2); }
+
+  .lang-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
 </style>
 </head>
 <body>
@@ -572,7 +602,11 @@
     <img src="/static/logo.png" id="header-logo" alt="InterVisions logo">
     <div>
       <h1>InterVisions - So-B-IT Broken Mirror</h1>
-      <span class="subtitle">Interactive CLIP Bias Audit · What does the model see?</span>
+      <span class="subtitle" data-i18n="subtitle">Interactive CLIP Bias Audit · What does the model see?</span>
+    </div>
+    <div id="lang-toggle">
+      <button class="lang-btn active" data-lang="en" onclick="setLang('en')">EN</button>
+      <button class="lang-btn" data-lang="es" onclick="setLang('es')">ES</button>
     </div>
   </div>
 
@@ -607,7 +641,7 @@
 
     <!-- Session logging -->
     <div class="panel-section">
-      <div class="panel-title">Session</div>
+      <div class="panel-title" data-i18n="panelSession">Session</div>
       <div id="session-start-row" style="display:flex; gap:8px; align-items:center;">
         <input
           id="session-name-input"
@@ -620,7 +654,7 @@
                  border-radius:6px; padding:6px 10px; color:var(--text); font-family:var(--font-mono);
                  font-size:0.75rem; outline:none;"
         />
-        <button id="session-start-btn"
+        <button id="session-start-btn" data-i18n="sessionStart"
           style="padding:6px 12px; border-radius:6px; border:1px solid rgba(34,197,94,0.35);
                  background:rgba(34,197,94,0.12); color:#22c55e; font-family:var(--font-mono);
                  font-size:0.72rem; cursor:pointer; white-space:nowrap;">
@@ -631,7 +665,7 @@
         <div id="session-label"
           style="font-family:var(--font-mono); font-size:0.68rem; color:#22c55e;">
         </div>
-        <button id="session-export-btn"
+        <button id="session-export-btn" data-i18n="sessionDownload"
           style="padding:6px 12px; border-radius:6px; border:1px solid rgba(99,102,241,0.35);
                  background:rgba(99,102,241,0.12); color:#a78bfa; font-family:var(--font-mono);
                  font-size:0.72rem; cursor:pointer; text-align:left;">
@@ -646,7 +680,7 @@
 
     <!-- FairFace zero-shot -->
     <div class="panel-section">
-      <div class="panel-title">Zero-Shot Classification (FairFace)</div>
+      <div class="panel-title" data-i18n="panelFairface">Zero-Shot Classification (FairFace)</div>
       <div id="fairface-container"></div>
     </div>
 
@@ -663,13 +697,13 @@
 
     <!-- Category filters -->
     <div class="panel-section">
-      <div class="panel-title">Category Filters</div>
+      <div class="panel-title" data-i18n="panelCategories">Category Filters</div>
       <div id="category-toggles"></div>
     </div>
 
     <!-- Custom word input -->
     <div class="panel-section">
-      <div class="panel-title">Add Custom Word</div>
+      <div class="panel-title" data-i18n="panelCustomWord">Add Custom Word</div>
       <div id="custom-word-row">
         <input
           id="custom-word-input"
@@ -679,16 +713,16 @@
           autocomplete="off"
           spellcheck="false"
         />
-        <button id="custom-word-btn">Add</button>
+        <button id="custom-word-btn" data-i18n="customWordAdd">Add</button>
       </div>
       <div id="custom-word-status"></div>
       <div id="custom-word-chips"></div>
-      <button id="custom-clear-btn">clear all custom words</button>
+      <button id="custom-clear-btn" data-i18n="customWordClear">clear all custom words</button>
     </div>
 
     <!-- Top-K terms -->
     <div class="panel-section">
-      <div class="panel-title">Closest So-B-IT Terms</div>
+      <div class="panel-title" data-i18n="panelTerms">Closest So-B-IT Terms</div>
       <ul id="term-list"></ul>
     </div>
 
@@ -731,10 +765,156 @@ const FF_COLORS = {
 const CUSTOM_COLOR = '#FFFFFF';
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  i18n
+// ═══════════════════════════════════════════════════════════════════════════
+const STRINGS = {
+  en: {
+    subtitle:              'Interactive CLIP Bias Audit · What does the model see?',
+    connecting:            'Connecting to server…',
+    fetchingTaxonomy:      'Fetching taxonomy and embeddings…',
+    startingCamera:        'Starting camera…',
+    connectingInference:   'Connecting to inference server…',
+    freeze:                'Freeze',
+    resume:                'Resume',
+    frozen:                'frozen',
+    live:                  'live',
+    disconnected:          'disconnected',
+    freezeBanner:          '⏸ Frozen — press Space or click Freeze to resume',
+    freezeTitle:           'Freeze frame (Space)',
+    panelSession:          'Session',
+    sessionPlaceholder:    'Session name…',
+    sessionStart:          'Start',
+    sessionDownload:       '↓ Download CSV',
+    sessionError:          'Could not start session',
+    panelFairface:         'Zero-Shot Classification (FairFace)',
+    panelCategories:       'Category Filters',
+    panelCustomWord:       'Add Custom Word',
+    customWordPlaceholder: 'e.g. powerful, elegant…',
+    customWordAdd:         'Add',
+    customWordClear:       'clear all custom words',
+    customWordEmbedding:   'Embedding…',
+    customWordDuplicate:   (w) => `"${w}" already exists`,
+    customWordServerError: 'Server error',
+    customWordAdded:       (w) => `✓ "${w}" added and embedded`,
+    customWordNetworkError:'Network error — is the server running?',
+    customWordCleared:     'Custom words cleared',
+    customWordRemoveTitle: 'Remove from view',
+    panelTerms:            'Closest So-B-IT Terms',
+    fsHint:                'Press F11 for fullscreen · Space to freeze/unfreeze',
+    ffAttr:                { race: 'Race', gender: 'Gender', age: 'Age' },
+  },
+  es: {
+    subtitle:              'Auditoría de sesgo CLIP · ¿Qué ve el modelo?',
+    connecting:            'Conectando al servidor…',
+    fetchingTaxonomy:      'Cargando taxonomía e incrustaciones…',
+    startingCamera:        'Iniciando cámara…',
+    connectingInference:   'Conectando al servidor de inferencia…',
+    freeze:                'Pausar',
+    resume:                'Reanudar',
+    frozen:                'pausado',
+    live:                  'en vivo',
+    disconnected:          'desconectado',
+    freezeBanner:          '⏸ Pausado — pulsa Espacio o haz clic en Pausar para continuar',
+    freezeTitle:           'Congelar imagen (Espacio)',
+    panelSession:          'Sesión',
+    sessionPlaceholder:    'Nombre de sesión…',
+    sessionStart:          'Iniciar',
+    sessionDownload:       '↓ Descargar CSV',
+    sessionError:          'No se pudo iniciar la sesión',
+    panelFairface:         'Clasificación Zero-Shot (FairFace)',
+    panelCategories:       'Filtros de categoría',
+    panelCustomWord:       'Añadir palabra personalizada',
+    customWordPlaceholder: 'p.ej. powerful, elegant…',
+    customWordAdd:         'Añadir',
+    customWordClear:       'borrar todas las palabras personalizadas',
+    customWordEmbedding:   'Procesando…',
+    customWordDuplicate:   (w) => `"${w}" ya existe`,
+    customWordServerError: 'Error del servidor',
+    customWordAdded:       (w) => `✓ "${w}" añadida`,
+    customWordNetworkError:'Error de red — ¿está el servidor activo?',
+    customWordCleared:     'Palabras personalizadas eliminadas',
+    customWordRemoveTitle: 'Quitar de la vista',
+    panelTerms:            'Términos So-B-IT más cercanos',
+    fsHint:                'F11 para pantalla completa · Espacio para pausar/continuar',
+    ffAttr:                { race: 'Etnia', gender: 'Género', age: 'Edad' },
+    ffLabels: {
+      race: {
+        'White':           'persona blanca',
+        'Black':           'persona negra',
+        'Indian':          'p. india',
+        'East Asian':      'p. de Asia oriental',
+        'Southeast Asian': 'p. de Asia sudoriental',
+        'Middle Eastern':  'p. de Oriente Medio',
+        'Latino/Hispanic': 'p. latina/hispana',
+      },
+      gender: {
+        'Male':   'Hombre',
+        'Female': 'Mujer',
+      },
+      age: {
+        'baby or toddler':         'bebé o infante',
+        'child':                   'niño/a',
+        'teenager':                'adolescente',
+        'young adult':             'p. adulta joven',
+        'adult in their thirties': 'p. adulta de unos treinta',
+        'middle-aged adult':       'p. de mediana edad',
+        'adult in their fifties':  'p. adulta de unos cincuenta',
+        'older adult':             'p. mayor',
+        'elderly person':          'p. anciana',
+      },
+    },
+  },
+};
+
+let currentLang = 'en';
+
+function t(key, ...args) {
+  const val = STRINGS[currentLang][key];
+  return typeof val === 'function' ? val(...args) : (val ?? key);
+}
+
+function setLang(lang) {
+  currentLang = lang;
+  applyTranslations();
+}
+
+function applyTranslations() {
+  // data-i18n elements (panel titles + simple buttons)
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.dataset.i18n;
+    const val = STRINGS[currentLang][key];
+    if (typeof val === 'string') el.textContent = val;
+  });
+
+  // Placeholders
+  document.getElementById('session-name-input').placeholder = t('sessionPlaceholder');
+  document.getElementById('custom-word-input').placeholder  = t('customWordPlaceholder');
+
+  // Pause button title & freeze banner
+  document.getElementById('pause-btn').title = t('freezeTitle');
+  document.getElementById('freeze-banner').textContent = t('freezeBanner');
+
+  // Footer hint
+  document.getElementById('fs-hint').textContent = t('fsHint');
+
+  // Re-run dynamic UI so badge / button label / fairface titles update
+  applyPauseUI();
+  if (STATE.fairfaceLabels && Object.keys(STATE.fairfaceLabels).length > 0) {
+    buildFairFaceContainer();
+    if (STATE.lastResult) updateFairFace(STATE.lastResult.fairface);
+  }
+
+  // Lang button active state
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.lang === currentLang);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  Init
 // ═══════════════════════════════════════════════════════════════════════════
 async function init() {
-  setLoadingStatus('Fetching taxonomy and embeddings…');
+  setLoadingStatus(t('fetchingTaxonomy'));
 
   const resp = await fetch('/api/init');
   const data = await resp.json();
@@ -754,10 +934,10 @@ async function init() {
   setupCustomWordUI();
   setupSessionUI();
 
-  setLoadingStatus('Starting camera…');
+  setLoadingStatus(t('startingCamera'));
   await startWebcam();
 
-  setLoadingStatus('Connecting to inference server…');
+  setLoadingStatus(t('connectingInference'));
   connectWebSocket();
 
   document.getElementById('pause-btn').addEventListener('click', togglePause);
@@ -770,6 +950,7 @@ async function init() {
   });
 
   requestAnimationFrame(renderLoop);
+  applyTranslations();
 
   setTimeout(() => {
     document.getElementById('loading-overlay').classList.add('hidden');
@@ -813,7 +994,7 @@ async function startSession() {
     document.getElementById('session-label').textContent = `● ${data.session}  ·  ${data.file}`;
     status.textContent = '';
   } catch (err) {
-    document.getElementById('session-status').textContent = 'Could not start session';
+    document.getElementById('session-status').textContent = t('sessionError');
   }
 }
 
@@ -842,7 +1023,7 @@ async function addCustomWord() {
 
   // Prevent double-submit
   btn.disabled = true;
-  setCustomStatus('Embedding…', 'var(--text-dim)');
+  setCustomStatus(t('customWordEmbedding'), 'var(--text-dim)');
 
   try {
     const resp = await fetch('/api/add_word', {
@@ -853,13 +1034,13 @@ async function addCustomWord() {
     const data = await resp.json();
 
     if (data.status === 'duplicate') {
-      setCustomStatus(`"${word}" already exists`, '#f59e0b');
+      setCustomStatus(t('customWordDuplicate', word), '#f59e0b');
       btn.disabled = false;
       return;
     }
 
     if (data.status === 'error') {
-      setCustomStatus(data.message || 'Server error', '#ef4444');
+      setCustomStatus(data.message || t('customWordServerError'), '#ef4444');
       btn.disabled = false;
       return;
     }
@@ -889,13 +1070,13 @@ async function addCustomWord() {
     }
 
     renderCustomChips();
-    setCustomStatus(`✓ "${data.word}" added and embedded`, '#22c55e');
+    setCustomStatus(t('customWordAdded', data.word), '#22c55e');
     input.value = '';
 
     setTimeout(() => setCustomStatus('', 'var(--text-dim)'), 3000);
 
   } catch (err) {
-    setCustomStatus('Network error — is the server running?', '#ef4444');
+    setCustomStatus(t('customWordNetworkError'), '#ef4444');
   }
 
   btn.disabled = false;
@@ -915,7 +1096,7 @@ async function clearAllCustomWords() {
   STATE.customWords = [];
 
   renderCustomChips();
-  setCustomStatus('Custom words cleared', 'var(--text-dim)');
+  setCustomStatus(t('customWordCleared'), 'var(--text-dim)');
   setTimeout(() => setCustomStatus('', 'var(--text-dim)'), 2000);
 }
 
@@ -939,7 +1120,7 @@ function renderCustomChips() {
   STATE.customWords.forEach(word => {
     const chip = document.createElement('span');
     chip.className = 'custom-chip';
-    chip.innerHTML = `${word}<span class="custom-chip-remove" title="Remove from view" data-word="${word}">✕</span>`;
+    chip.innerHTML = `${word}<span class="custom-chip-remove" title="${t('customWordRemoveTitle')}" data-word="${word}">✕</span>`;
     chip.querySelector('.custom-chip-remove').addEventListener('click', () => removeCustomWord(word));
     container.appendChild(chip);
   });
@@ -987,7 +1168,7 @@ function applyPauseUI() {
   const playIcon = document.getElementById('play-icon');
 
   btn.classList.toggle('is-paused', paused);
-  label.textContent = paused ? 'Resume' : 'Freeze';
+  label.textContent = paused ? t('resume') : t('freeze');
   pauseIcon.style.display = paused ? 'none' : 'block';
   playIcon.style.display = paused ? 'block' : 'none';
 
@@ -997,14 +1178,14 @@ function applyPauseUI() {
 
   const badge = document.getElementById('status-badge');
   if (paused) {
-    badge.textContent = 'frozen';
+    badge.textContent = t('frozen');
     badge.classList.remove('disconnected');
     badge.classList.add('paused-badge');
   } else if (STATE.connected) {
-    badge.textContent = 'live';
+    badge.textContent = t('live');
     badge.classList.remove('paused-badge', 'disconnected');
   } else {
-    badge.textContent = 'disconnected';
+    badge.textContent = t('disconnected');
     badge.classList.remove('paused-badge');
     badge.classList.add('disconnected');
   }
@@ -1090,7 +1271,7 @@ function sendFrame() {
 function updateStatusBadge(connected) {
   if (STATE.paused) return;
   const badge = document.getElementById('status-badge');
-  badge.textContent = connected ? 'live' : 'disconnected';
+  badge.textContent = connected ? t('live') : t('disconnected');
   badge.className = connected ? '' : 'disconnected';
   badge.id = 'status-badge';
 }
@@ -1146,15 +1327,18 @@ function buildFairFaceContainer() {
   for (const [attr, labels] of Object.entries(STATE.fairfaceLabels)) {
     const group = document.createElement('div');
     group.className = 'ff-group';
-    group.innerHTML = `<div class="ff-group-title">${attr}</div>`;
+    const attrLabel = (STRINGS[currentLang].ffAttr[attr]) || attr;
+    group.innerHTML = `<div class="ff-group-title">${attrLabel}</div>`;
 
     labels.forEach(label => {
+      const ffLabelMap = ((STRINGS[currentLang].ffLabels || {})[attr]) || {};
+      const displayLabel = ffLabelMap[label] || label;
       const row = document.createElement('div');
       row.className = 'ff-bar-row';
       row.dataset.attr = attr;
       row.dataset.label = label;
       row.innerHTML = `
-        <span class="ff-label">${label}</span>
+        <span class="ff-label">${displayLabel}</span>
         <div class="ff-bar-bg"><div class="ff-bar" style="width:0%;background:${FF_COLORS[attr] || '#6366f1'}"></div></div>
         <span class="ff-pct">0%</span>
       `;
