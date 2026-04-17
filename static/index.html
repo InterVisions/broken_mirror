@@ -583,6 +583,106 @@
     border-color: var(--accent);
     color: #fff;
   }
+
+  /* ── Theme Toggle ────────────────────────────────── */
+  #theme-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 26px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+
+  #theme-toggle:hover { color: var(--text); border-color: rgba(0,0,0,0.2); }
+
+  #theme-toggle svg { width: 14px; height: 14px; display: block; }
+
+  /* ── Session name input (extracted from inline) ──── */
+  #session-name-input {
+    flex: 1;
+    background: rgba(0,0,0,0.04);
+    border: 1px solid rgba(0,0,0,0.12);
+    border-radius: 6px;
+    padding: 6px 10px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  /* ── Dark mode overrides ─────────────────────────── */
+  [data-theme="dark"] {
+    --bg: #0a0a0f;
+    --bg-panel: rgba(15, 15, 25, 0.85);
+    --bg-card: rgba(20, 20, 35, 0.9);
+    --text: #e8e8f0;
+    --text-bright: #ffffff;
+    --accent: #6366f1;
+    --glow: rgba(99, 102, 241, 0.3);
+    --border: rgba(255, 255, 255, 0.06);
+  }
+
+  [data-theme="dark"] #left-panel,
+  [data-theme="dark"] #sidebar {
+    scrollbar-color: rgba(255,255,255,0.1) transparent;
+  }
+
+  [data-theme="dark"] #pause-btn {
+    border-color: rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.05);
+  }
+
+  [data-theme="dark"] #pause-btn:hover {
+    background: rgba(255,255,255,0.1);
+    border-color: rgba(255,255,255,0.25);
+  }
+
+  [data-theme="dark"] .term-item {
+    background: rgba(255,255,255,0.02);
+  }
+
+  [data-theme="dark"] .term-item:hover {
+    background: rgba(255,255,255,0.05);
+  }
+
+  [data-theme="dark"] .term-bar-bg {
+    background: rgba(255,255,255,0.04);
+  }
+
+  [data-theme="dark"] .ff-bar-bg {
+    background: rgba(255,255,255,0.04);
+  }
+
+  [data-theme="dark"] #custom-word-input {
+    background: rgba(255,255,255,0.05);
+    border-color: rgba(255,255,255,0.12);
+  }
+
+  [data-theme="dark"] .custom-chip {
+    background: rgba(255,255,255,0.07);
+    border-color: rgba(255,255,255,0.12);
+  }
+
+  [data-theme="dark"] #session-name-input {
+    background: rgba(255,255,255,0.05);
+    border-color: rgba(255,255,255,0.12);
+  }
+
+  [data-theme="dark"] #theme-toggle:hover {
+    border-color: rgba(255,255,255,0.2);
+  }
+
+  [data-theme="dark"] .lang-btn:hover {
+    border-color: rgba(255,255,255,0.2);
+  }
 </style>
 </head>
 <body>
@@ -608,6 +708,20 @@
       <button class="lang-btn active" data-lang="en" onclick="setLang('en')">EN</button>
       <button class="lang-btn" data-lang="es" onclick="setLang('es')">ES</button>
     </div>
+    <button id="theme-toggle" title="Toggle dark/light mode" onclick="toggleTheme()">
+      <!-- Moon: shown in light mode (click → go dark) -->
+      <svg id="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+      </svg>
+      <!-- Sun: shown in dark mode (click → go light) -->
+      <svg id="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+        <circle cx="12" cy="12" r="5"/>
+        <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+        <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+      </svg>
+    </button>
   </div>
 
   <!-- Left panel: camera + controls + session + fairface -->
@@ -650,9 +764,6 @@
           maxlength="60"
           autocomplete="off"
           spellcheck="false"
-          style="flex:1; background:rgba(0,0,0,0.04); border:1px solid rgba(0,0,0,0.12);
-                 border-radius:6px; padding:6px 10px; color:var(--text); font-family:var(--font-mono);
-                 font-size:0.75rem; outline:none;"
         />
         <button id="session-start-btn" data-i18n="sessionStart"
           style="padding:6px 12px; border-radius:6px; border:1px solid rgba(34,197,94,0.35);
@@ -868,6 +979,28 @@ const STRINGS = {
 
 let currentLang = 'en';
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  Theme toggle (light / dark)
+// ═══════════════════════════════════════════════════════════════════════════
+function toggleTheme() {
+  const isDark = document.documentElement.dataset.theme === 'dark';
+  const newTheme = isDark ? 'light' : 'dark';
+  document.documentElement.dataset.theme = newTheme;
+  localStorage.setItem('theme', newTheme);
+  updateThemeIcon(newTheme);
+}
+
+function updateThemeIcon(theme) {
+  document.getElementById('icon-moon').style.display = theme === 'dark' ? 'none' : 'block';
+  document.getElementById('icon-sun').style.display  = theme === 'dark' ? 'block' : 'none';
+}
+
+function applyStoredTheme() {
+  const stored = localStorage.getItem('theme') || 'light';
+  document.documentElement.dataset.theme = stored;
+  updateThemeIcon(stored);
+}
+
 function t(key, ...args) {
   const val = STRINGS[currentLang][key];
   return typeof val === 'function' ? val(...args) : (val ?? key);
@@ -914,6 +1047,7 @@ function applyTranslations() {
 //  Init
 // ═══════════════════════════════════════════════════════════════════════════
 async function init() {
+  applyStoredTheme();
   setLoadingStatus(t('fetchingTaxonomy'));
 
   const resp = await fetch('/api/init');
@@ -1432,13 +1566,15 @@ function renderLoop() {
 
   ctx.clearRect(0, 0, w, h);
 
+  const isDark = document.documentElement.dataset.theme === 'dark';
+
   const grad = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.max(w, h) * 0.6);
-  grad.addColorStop(0, '#eeeef5');
-  grad.addColorStop(1, '#e4e4ef');
+  grad.addColorStop(0, isDark ? '#0f0f1a' : '#eeeef5');
+  grad.addColorStop(1, isDark ? '#0a0a0f' : '#e4e4ef');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, w, h);
 
-  ctx.strokeStyle = 'rgba(0,0,0,0.04)';
+  ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.04)';
   ctx.lineWidth = 1;
   const gridStep = 80;
   for (let x = gridStep; x < w; x += gridStep) {
@@ -1554,7 +1690,7 @@ function renderLoop() {
 
     const outerAlpha = STATE.paused ? 0.12 : 0.25;
     const userGlow = ctx.createRadialGradient(ux, uy, 0, ux, uy, 35 * pulse);
-    userGlow.addColorStop(0, `rgba(79, 70, 229, ${outerAlpha * 2})`);
+    userGlow.addColorStop(0, isDark ? `rgba(255, 255, 255, ${outerAlpha})` : `rgba(79, 70, 229, ${outerAlpha * 2})`);
     userGlow.addColorStop(0.5, STATE.paused ? 'rgba(245, 158, 11, 0.08)' : 'rgba(99, 102, 241, 0.1)');
     userGlow.addColorStop(1, 'transparent');
     ctx.beginPath();
