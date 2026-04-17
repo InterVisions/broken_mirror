@@ -683,6 +683,40 @@
   [data-theme="dark"] .lang-btn:hover {
     border-color: rgba(255,255,255,0.2);
   }
+
+  /* ── Font-size control ───────────────────────────── */
+  #font-size-ctrl {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .fs-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    line-height: 1;
+    transition: all 0.2s;
+    user-select: none;
+    flex-shrink: 0;
+  }
+
+  #fs-down { font-size: 0.6rem; }
+  #fs-up   { font-size: 0.8rem; }
+
+  .fs-btn:hover:not(:disabled) { color: var(--text); border-color: rgba(0,0,0,0.2); }
+  .fs-btn:disabled { opacity: 0.25; cursor: not-allowed; }
+
+  [data-theme="dark"] .fs-btn:hover:not(:disabled) { border-color: rgba(255,255,255,0.2); }
 </style>
 </head>
 <body>
@@ -722,6 +756,10 @@
         <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
       </svg>
     </button>
+    <div id="font-size-ctrl">
+      <button id="fs-down" class="fs-btn" title="Decrease label size" onclick="changeFontSize(-1)">A−</button>
+      <button id="fs-up"   class="fs-btn" title="Increase label size" onclick="changeFontSize(+1)">A+</button>
+    </div>
   </div>
 
   <!-- Left panel: camera + controls + session + fairface -->
@@ -865,6 +903,7 @@ const STATE = {
   height: 0,
   // Custom words added this session
   customWords: [],
+  fontSizeIdx: 1,  // index into FONT_SIZES; 1 = 11 px (default)
 };
 
 const FF_COLORS = {
@@ -1024,6 +1063,32 @@ function applyStoredTheme() {
   updateThemeIcon(stored);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  Canvas font-size control
+// ═══════════════════════════════════════════════════════════════════════════
+const FONT_SIZES = [8, 11, 14, 17, 20, 23]; // px for term labels; YOU label = size + 2
+
+function changeFontSize(dir) {
+  const next = STATE.fontSizeIdx + dir;
+  if (next < 0 || next >= FONT_SIZES.length) return;
+  STATE.fontSizeIdx = next;
+  localStorage.setItem('fontSizeIdx', next);
+  updateFontSizeButtons();
+}
+
+function updateFontSizeButtons() {
+  document.getElementById('fs-down').disabled = STATE.fontSizeIdx === 0;
+  document.getElementById('fs-up').disabled   = STATE.fontSizeIdx === FONT_SIZES.length - 1;
+}
+
+function applyStoredFontSize() {
+  const stored = parseInt(localStorage.getItem('fontSizeIdx'), 10);
+  if (!isNaN(stored) && stored >= 0 && stored < FONT_SIZES.length) {
+    STATE.fontSizeIdx = stored;
+  }
+  updateFontSizeButtons();
+}
+
 function t(key, ...args) {
   const val = STRINGS[currentLang][key];
   return typeof val === 'function' ? val(...args) : (val ?? key);
@@ -1071,6 +1136,7 @@ function applyTranslations() {
 // ═══════════════════════════════════════════════════════════════════════════
 async function init() {
   applyStoredTheme();
+  applyStoredFontSize();
   setLoadingStatus(t('fetchingTaxonomy'));
 
   const resp = await fetch('/api/init');
@@ -1655,7 +1721,8 @@ function renderLoop() {
         .slice(0, STATE.maxLabels)
     : [];
 
-  ctx.font = '500 11px "Space Grotesk", sans-serif';
+  const labelPx = FONT_SIZES[STATE.fontSizeIdx];
+  ctx.font = `500 ${labelPx}px "Space Grotesk", sans-serif`;
   ctx.textBaseline = 'middle';
 
   for (const tt of topTermsSorted) {
@@ -1729,7 +1796,7 @@ function renderLoop() {
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    ctx.font = 'bold 13px "Space Grotesk", sans-serif';
+    ctx.font = `bold ${labelPx + 2}px "Space Grotesk", sans-serif`;
     ctx.fillStyle = STATE.paused ? 'rgba(245,158,11,0.85)' : '#4f46e5';
     ctx.fillText('YOU', ux + 18, uy + 1);
   }
