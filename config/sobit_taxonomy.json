@@ -118,6 +118,16 @@
         "travel agent", "trucker", "umpire", "vet", "waiter", "waitress",
         "web designer", "writer"
       ]
+    },
+    "Archetype": {
+      "color": "#F0A500",
+      "words": [
+        "mother", "father", "warrior", "wise", "shadow", "traveller", "lover",
+        "creator", "destructor", "hero", "naive", "magician", "rebel", "ruler",
+        "guardian angel", "orphan", "priest", "victim", "martyr", "inner explorer",
+        "jester", "guardian of tradition", "strategist", "mediator", "judge",
+        "healer", "visionary"
+      ]
     }
   },
   "fairface_labels": {
