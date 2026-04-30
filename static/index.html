@@ -904,6 +904,7 @@ const STATE = {
   // Custom words added this session
   customWords: [],
   fontSizeIdx: 1,  // index into FONT_SIZES; 1 = 11 px (default)
+  categoryLabels: {},  // populated from server: English cat name → display label
 };
 
 const FF_COLORS = {
@@ -1036,6 +1037,446 @@ const STRINGS = {
         'elderly person':          'p. anciana',
       },
     },
+    categoryLabels: {
+      'Appearance':          'Apariencia',
+      'Behavioral':          'Comportamiento',
+      'Education and wealth':'Educación y patrimonio',
+      'Criminal justice':    'Justicia penal',
+      'Healthcare':          'Salud',
+      'Portrayal in media':  'Representación mediática',
+      'Political':           'Política',
+      'Religion':            'Religión',
+      'Occupation':          'Ocupación',
+      'Archetype':           'Arquetipo',
+      'Custom':              'Personalizado',
+    },
+    _dead: {
+      'attractive':      'atractivo',
+      'beautiful':       'belleza',
+      'chubby':          'gordura',
+      'cute':            'ternura',
+      'disfigured':      'desfiguración',
+      'elegant':         'elegancia',
+      'fat':             'gordura',
+      'fit':             'buena forma',
+      'glamorous':       'glamour',
+      'groomed':         'pulcritud',
+      'handicap':        'discapacidad',
+      'handsome':        'atractivo',
+      'muscular':        'musculatura',
+      'old':             'vejez',
+      'overweight':      'sobrepeso',
+      'pretty':          'belleza',
+      'sexy':            'sensualidad',
+      'short':           'baja estatura',
+      'stylish':         'estilo',
+      'tall':            'alta estatura',
+      'thin':            'delgadez',
+      'ugly':            'fealdad',
+      'unattractive':    'falta de atractivo',
+      'underweight':     'bajo peso',
+      'young':           'juventud',
+      // ── Behavioral ──────────────────────────────────────────────────────────
+      'aggressive':      'agresividad',
+      'ambitious':       'ambición',
+      'amused':          'diversión',
+      'angry':           'ira',
+      'anxious':         'ansiedad',
+      'ashamed':         'vergüenza',
+      'attached':        'apego',
+      'bored':           'aburrimiento',
+      'bossy':           'autoritarismo',
+      'brave':           'valentía',
+      'breadwinner':     'sustento familiar',
+      'calm':            'calma',
+      'caring':          'cuidado',
+      'committed':       'compromiso',
+      'compassionate':   'compasión',
+      'confident':       'autoconfianza',
+      'conformist':      'conformismo',
+      'content':         'satisfacción',
+      'curious':         'curiosidad',
+      'dainty':          'delicadeza',
+      'dedicated':       'dedicación',
+      'dependent':       'dependencia',
+      'dignified':       'dignidad',
+      'disgusted':       'repugnancia',
+      'docile':          'docilidad',
+      'domestic':        'domesticidad',
+      'eccentric':       'excentricidad',
+      'emotional':       'emotividad',
+      'excited':         'entusiasmo',
+      'friendly':        'amabilidad',
+      'frustrated':      'frustración',
+      'gentle':          'gentileza',
+      'happy':           'alegría',
+      'helpful':         'solidaridad',
+      'hopeful':         'esperanza',
+      'hopeless':        'desesperanza',
+      'hysterical':      'histeria',
+      'immature':        'inmadurez',
+      'independent':     'independencia',
+      'indifferent':     'indiferencia',
+      'insecure':        'inseguridad',
+      'intelligent':     'inteligencia',
+      'lazy':            'pereza',
+      'loud':            'estridencia',
+      'loving':          'afecto',
+      'loyal':           'lealtad',
+      'naggy':           'insistencia',
+      'normal':          'normalidad',
+      'nurturing':       'crianza',
+      'outcast':         'marginalidad',
+      'outgoing':        'sociabilidad',
+      'passive':         'pasividad',
+      'polite':          'cortesía',
+      'popular':         'popularidad',
+      'possessive':      'posesividad',
+      'promiscuous':     'promiscuidad',
+      'proud':           'orgullo',
+      'rational':        'racionalidad',
+      'rowdy':           'alboroto',
+      'sad':             'tristeza',
+      'sensitive':       'sensibilidad',
+      'shy':             'timidez',
+      'strong':          'fortaleza',
+      'studious':        'aplicación',
+      'submissive':      'sumisión',
+      'subservient':     'servilismo',
+      'supportive':      'apoyo',
+      'surprised':       'sorpresa',
+      'unapproachable':  'inaccesibilidad',
+      'unconventional':  'inconformismo',
+      'unfriendly':      'hostilidad',
+      'unruly':          'indisciplina',
+      'untrustworthy':   'deslealtad',
+      'warm':            'calidez',
+      'weak':            'debilidad',
+      'well-spoken':     'elocuencia',
+      // ── Education and wealth ─────────────────────────────────────────────────
+      'disadvantaged':     'desventaja social',
+      'dumb':              'ignorancia',
+      'educated':          'educación',
+      'elite':             'élite',
+      'homeless':          'persona sin hogar',
+      'illiterate':        'analfabetismo',
+      'low-income':        'bajos ingresos',
+      'low-wage':          'bajo salario',
+      'menial':            'trabajo servil',
+      'poor':              'pobreza',
+      'rich':              'riqueza',
+      'servile':           'servilismo',
+      'smart':             'inteligencia',
+      'underperforming':   'bajo rendimiento',
+      'underprepared':     'falta de preparación',
+      'underrepresented':  'infrarrepresentación',
+      'undocumented':      'situación irregular',
+      'uneducated':        'escasa formación',
+      'unmotivated':       'desmotivación',
+      'unskilled':         'falta de cualificación',
+      'wealthy':           'opulencia',
+      'working-class':     'clase trabajadora',
+      // ── Criminal justice ────────────────────────────────────────────────────
+      'addict':            'adicción',
+      'burglar':           'allanamiento',
+      'criminal':          'criminalidad',
+      'dangerous':         'peligrosidad',
+      'delinquent':        'delincuencia',
+      'deviant':           'desviación social',
+      'diseased':          'enfermedad',
+      'embezzler':         'malversación',
+      'felon':             'delito grave',
+      'fraud':             'fraude',
+      'freak':             'rareza',
+      'gang-related':      'pertenencia a banda',
+      'gangster':          'banda criminal',
+      'hacker':            'hacker',
+      'illegal':           'ilegalidad',
+      'insane':            'demencia',
+      'lawless':           'anarquía',
+      'mugger':            'asalto',
+      'murderer':          'asesinato',
+      'psychopath':        'psicopatía',
+      'robber':            'robo',
+      'savage':            'salvajismo',
+      'shoplifter':        'hurto en comercio',
+      'terrorist':         'terrorismo',
+      'thief':             'hurto',
+      'thug':              'intimidación callejera',
+      'violent':           'violencia',
+      // ── Healthcare ──────────────────────────────────────────────────────────
+      'addicted':                'adicción',
+      'at-risk':                 'en situación de riesgo',
+      'cripple':                 'discapacidad física',
+      'disabled':                'discapacidad',
+      'drug-seeking':            'búsqueda de drogas',
+      'lethargic':               'letargo',
+      'mentally ill':            'enfermedad mental',
+      'obese':                   'obesidad',
+      'prone to disease':        'susceptibilidad a enfermedades',
+      'underprivileged':         'vulnerabilidad social',
+      'unhealthy':               'mala salud',
+      'uninsured':               'sin cobertura sanitaria',
+      'autistic':                'autismo',
+      'abortion seeking':        'solicitud de aborto',
+      // ── Portrayal in media ──────────────────────────────────────────────────
+      'backward':      'atraso',
+      'barbaric':      'barbarie',
+      'cosmopolitan':  'cosmopolitismo',
+      'exotic':        'exotismo',
+      'foreign':       'extranjería',
+      'ghetto':        'gueto',
+      'hypersexual':   'hipersexualización',
+      'immigrant':     'inmigración',
+      'local':         'localismo',
+      'mysterious':    'misterio',
+      'native':        'nativismo',
+      'outsider':      'persona foránea',
+      'primitive':     'primitivismo',
+      'rural':         'ruralidad',
+      'sassy':         'descaro',
+      'third-world':   'tercer mundo',
+      'traditional':   'tradición',
+      'tribal':        'tribalismo',
+      'uncivilized':   'incivilidad',
+      'uncultured':    'incultura',
+      'unrefined':     'tosquedad',
+      'urban':         'urbanidad',
+      // ── Political ───────────────────────────────────────────────────────────
+      'activist':        'activismo',
+      'anarchist':       'anarquismo',
+      'anti-american':   'antiamericanismo',
+      'anti-semitic':    'antisemitismo',
+      'apolitical':      'apoliticismo',
+      'authoritarian':   'autoritarismo',
+      'centrist':        'centrismo',
+      'communist':       'comunismo',
+      'conservative':    'conservadurismo',
+      'democrat':        'demócrata',
+      'divisive':        'polarización',
+      'extremist':       'extremismo',
+      'fascist':         'fascismo',
+      'globalist':       'globalismo',
+      'interventionist': 'intervencionismo',
+      'liberal':         'liberalismo',
+      'libertarian':     'libertarismo',
+      'militant':        'militancia',
+      'nationalist':     'nacionalismo',
+      'populist':        'populismo',
+      'radical':         'radicalismo',
+      'republican':      'republicanismo',
+      'separatist':      'separatismo',
+      'socialist':       'socialismo',
+      // ── Religion ────────────────────────────────────────────────────────────
+      'agnostic':        'agnosticismo',
+      'atheist':         'ateísmo',
+      'buddhist':        'budismo',
+      'catholic':        'catolicismo',
+      'christian':       'cristianismo',
+      'dogmatic':        'dogmatismo',
+      'evangelical':     'evangelismo',
+      'fanatical':       'fanatismo',
+      'fundamentalist':  'fundamentalismo',
+      'hindu':           'hinduismo',
+      'intolerant':      'intolerancia',
+      'jewish':          'judaísmo',
+      'mujahid':         'muyahid',
+      'muslim':          'islam',
+      'orthodox':        'ortodoxia',
+      'progressive':     'progresismo',
+      'protestant':      'protestantismo',
+      'sectarian':       'sectarismo',
+      'seeker':          'búsqueda espiritual',
+      'sharia':          'sharia',
+      'spiritual':       'espiritualidad',
+      'superstitious':   'superstición',
+      'traditionalist':  'tradicionalismo',
+      // ── Occupation ──────────────────────────────────────────────────────────
+      'CEO':                        'dirección ejecutiva',
+      'TV presenter':               'presentación televisiva',
+      'academic':                   'persona académica',
+      'accountant':                 'contabilidad',
+      'actor':                      'actuación',
+      'actress':                    'actuación',
+      'analyst':                    'análisis',
+      'animator':                   'animación',
+      'architect':                  'arquitectura',
+      'artist':                     'arte',
+      'assistant':                  'asistencia',
+      'athlete':                    'atletismo',
+      'attendant':                  'atención',
+      'attorney':                   'abogacía',
+      'auditor':                    'auditoría',
+      'author':                     'autoría',
+      'baker':                      'panadería',
+      'banker':                     'banca',
+      'barber':                     'barbería',
+      'bartender':                  'servicio de bar',
+      'biologist':                  'biología',
+      'boxer':                      'boxeo',
+      'broker':                     'correduría',
+      'builder':                    'construcción',
+      'businessperson':             'empresariado',
+      'butcher':                    'carnicería',
+      'career counselor':           'orientación laboral',
+      'caretaker':                  'cuidado de personas',
+      'carpenter':                  'carpintería',
+      'cashier':                    'caja',
+      'chef':                       'alta cocina',
+      'chemist':                    'química',
+      'chess player':               'ajedrez',
+      'chief':                      'jefatura',
+      'civil servant':              'funcionariado',
+      'cleaner':                    'limpieza',
+      'clerk':                      'administración',
+      'coach':                      'entrenamiento',
+      'comedian':                   'comedia',
+      'comic book writer':          'guion de cómic',
+      'commander':                  'comandancia',
+      'company director':           'dirección empresarial',
+      'composer':                   'composición musical',
+      'computer programmer':        'programación',
+      'construction worker':        'obra',
+      'cook':                       'cocina',
+      'counselor':                  'asesoría',
+      'dancer':                     'danza',
+      'decorator':                  'decoración',
+      'delivery man':               'reparto',
+      'dentist':                    'odontología',
+      'designer':                   'diseño',
+      'detective':                  'detective',
+      'diplomat':                   'diplomacia',
+      'director':                   'dirección',
+      'doctor':                     'medicina',
+      'economist':                  'economía',
+      'editor':                     'edición',
+      'electrician':                'electricidad',
+      'engineer':                   'ingeniería',
+      'entrepreneur':               'emprendimiento',
+      'executive':                  'gerencia',
+      'farmer':                     'agricultura',
+      'film director':              'dirección de cine',
+      'firefighter':                'extinción de incendios',
+      'flight attendant':           'auxiliar de vuelo',
+      'football player':            'fútbol',
+      'garbage collector':          'recogida de residuos',
+      'geologist':                  'geología',
+      'guard':                      'vigilancia',
+      'guitarist':                  'guitarra',
+      'hairdresser':                'peluquería',
+      'handball player':            'balonmano',
+      'handyman':                   'reparaciones',
+      'head teacher':               'dirección escolar',
+      'historian':                  'historiografía',
+      'homemaker':                  'gestión del hogar',
+      'housekeeper':                'servicio doméstico',
+      'illustrator':                'ilustración',
+      'janitor':                    'conserjería',
+      'jeweler':                    'joyería',
+      'journalist':                 'periodismo',
+      'judge':                      'judicatura',
+      'laborer':                    'mano de obra',
+      'lawyer':                     'jurisprudencia',
+      'lecturer':                   'docencia universitaria',
+      'librarian':                  'biblioteconomía',
+      'library assistant':          'asistencia bibliotecaria',
+      'linguist':                   'lingüística',
+      'magician':                   'ilusionismo',
+      'maid':                       'limpieza doméstica',
+      'makeup artist':              'maquillaje',
+      'manager':                    'gestión',
+      'mathematician':              'matemáticas',
+      'mechanic':                   'mecánica',
+      'midwife':                    'partería',
+      'miner':                      'minería',
+      'model':                      'modelaje',
+      'mover':                      'mudanzas',
+      'musician':                   'música',
+      'nurse':                      'enfermería',
+      'opera singer':               'ópera',
+      'optician':                   'óptica',
+      'painter':                    'pintura',
+      'pensioner':                  'jubilación',
+      'performing artist':          'artes escénicas',
+      'personal assistant':         'asistencia personal',
+      'pharmacist':                 'farmacia',
+      'photographer':               'fotografía',
+      'physician':                  'medicina clínica',
+      'physicist':                  'física',
+      'pianist':                    'piano',
+      'pilot':                      'aviación',
+      'plumber':                    'fontanería',
+      'poet':                       'poesía',
+      'police officer':             'policía',
+      'policeman':                  'policía',
+      'politician':                 'política',
+      'porter':                     'portería',
+      'priest':                     'sacerdocio',
+      'prison officer':             'funcionariado penitenciario',
+      'prisoner':                   'reclusión',
+      'producer':                   'producción',
+      'professor':                  'profesorado',
+      'prosecutor':                 'fiscalía',
+      'psychologist':               'psicología',
+      'puppeteer':                  'titiritería',
+      'real-estate developer':      'promoción inmobiliaria',
+      'realtor':                    'correduría inmobiliaria',
+      'receptionist':               'recepción',
+      'researcher':                 'investigación',
+      'sailor':                     'marinería',
+      'salesperson':                'ventas',
+      'scientist':                  'ciencia',
+      'secretary':                  'secretariado',
+      'sheriff':                    'alguacilazgo',
+      'shop assistant':             'atención en comercio',
+      'sign language interpreter':  'interpretación en lengua de signos',
+      'singer':                     'canto',
+      'sociologist':                'sociología',
+      'software developer':         'desarrollo de software',
+      'soldier':                    'milicia',
+      'solicitor':                  'asesoría jurídica',
+      'supervisor':                 'supervisión',
+      'surgeon':                    'cirugía',
+      'swimmer':                    'natación',
+      'tailor':                     'sastrería',
+      'teacher':                    'enseñanza',
+      'telephone operator':         'teleoperación',
+      'tennis player':              'tenis',
+      'theologian':                 'teología',
+      'translator':                 'traducción',
+      'travel agent':               'agencia de viajes',
+      'trucker':                    'transporte de mercancías',
+      'umpire':                     'arbitraje',
+      'vet':                        'veterinaria',
+      'waiter':                     'servicio de mesas',
+      'waitress':                   'servicio de mesas',
+      'web designer':               'diseño web',
+      'writer':                     'escritura',
+      // ── Archetype ───────────────────────────────────────────────────────────
+      'mother':                 'maternidad',
+      'father':                 'paternidad',
+      'warrior':                'persona guerrera',
+      'wise':                   'sabiduría',
+      'shadow':                 'sombra',
+      'traveller':              'persona viajera',
+      'lover':                  'amante',
+      'creator':                'creatividad',
+      'destructor':             'destrucción',
+      'hero':                   'heroísmo',
+      'naive':                  'ingenuidad',
+      'rebel':                  'rebeldía',
+      'ruler':                  'gobernanza',
+      'guardian angel':         'ángel de la guarda',
+      'orphan':                 'orfandad',
+      'victim':                 'víctima',
+      'martyr':                 'martirio',
+      'inner explorer':         'exploración interior',
+      'jester':                 'bufonería',
+      'guardian of tradition':  'custodia de la tradición',
+      'strategist':             'estrategia',
+      'mediator':               'mediación',
+      'healer':                 'sanación',
+    },
   },
 };
 
@@ -1095,8 +1536,23 @@ function t(key, ...args) {
   return typeof val === 'function' ? val(...args) : (val ?? key);
 }
 
-function setLang(lang) {
+function tCat(cat) {
+  return STATE.categoryLabels[cat]
+    || ((STRINGS[currentLang].categoryLabels) || {})[cat]
+    || cat;
+}
+
+function tWord(word) {
+  return ((STRINGS[currentLang].termLabels) || {})[word] || word;
+}
+
+async function setLang(lang) {
   currentLang = lang;
+  // Re-fetch taxonomy data embedded in the chosen language's UMAP space
+  if (STATE.terms.length > 0) {
+    await loadLangData(lang);
+    STATE.lastResult = null;  // clear stale top-terms from previous lang
+  }
   applyTranslations();
 }
 
@@ -1125,6 +1581,8 @@ function applyTranslations() {
     buildFairFaceContainer();
     if (STATE.lastResult) updateFairFace(STATE.lastResult.fairface);
   }
+  if (Object.keys(STATE.categories).length > 0) buildCategoryToggles();
+  if (STATE.lastResult) updateTermList(STATE.lastResult.top_terms);
 
   // Lang button active state
   document.querySelectorAll('.lang-btn').forEach(btn => {
@@ -1135,22 +1593,26 @@ function applyTranslations() {
 // ═══════════════════════════════════════════════════════════════════════════
 //  Init
 // ═══════════════════════════════════════════════════════════════════════════
+async function loadLangData(lang) {
+  const resp = await fetch(`/api/init?lang=${lang}`);
+  const data = await resp.json();
+  STATE.terms          = data.terms;
+  STATE.categories     = data.categories;
+  STATE.categoryLabels = data.category_labels || {};
+  STATE.fairfaceLabels = data.fairface_labels;
+  STATE.maxLabels      = data.max_labels;
+  // Preserve active category selection — add any newly seen cats
+  for (const cat of Object.keys(STATE.categories)) {
+    STATE.activeCategories.add(cat);
+  }
+}
+
 async function init() {
   applyStoredTheme();
   applyStoredFontSize();
   setLoadingStatus(t('fetchingTaxonomy'));
 
-  const resp = await fetch('/api/init');
-  const data = await resp.json();
-
-  STATE.terms = data.terms;
-  STATE.categories = data.categories;
-  STATE.fairfaceLabels = data.fairface_labels;
-  STATE.maxLabels = data.max_labels;
-
-  for (const cat of Object.keys(STATE.categories)) {
-    STATE.activeCategories.add(cat);
-  }
+  await loadLangData(currentLang);
 
   buildCategoryToggles();
   buildFairFaceContainer();
@@ -1253,7 +1715,7 @@ async function addCustomWord() {
     const resp = await fetch('/api/add_word', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ word, category: 'Custom', color: CUSTOM_COLOR }),
+      body: JSON.stringify({ word, category: 'Custom', color: CUSTOM_COLOR, lang: currentLang }),
     });
     const data = await resp.json();
 
@@ -1310,7 +1772,7 @@ async function clearAllCustomWords() {
   if (STATE.customWords.length === 0) return;
 
   try {
-    await fetch('/api/custom_words', { method: 'DELETE' });
+    await fetch(`/api/custom_words?lang=${currentLang}`, { method: 'DELETE' });
   } catch (_) {
     // Best-effort — even if the request fails, clean up client state
   }
@@ -1326,7 +1788,7 @@ async function clearAllCustomWords() {
 
 async function removeCustomWord(word) {
   try {
-    await fetch(`/api/custom_words/${encodeURIComponent(word)}`, { method: 'DELETE' });
+    await fetch(`/api/custom_words/${encodeURIComponent(word)}?lang=${currentLang}`, { method: 'DELETE' });
   } catch (_) {
     // Best-effort — clean up client state regardless
   }
@@ -1489,6 +1951,7 @@ function sendFrame() {
     data: captureFrame(),
     top_k: 15,
     categories: [...STATE.activeCategories],
+    lang: currentLang,
   }));
 }
 
@@ -1532,8 +1995,8 @@ function updateTermList(topTerms) {
     }
 
     item.querySelector('.term-dot').style.background = term.color;
-    item.querySelector('.term-word').textContent = term.word;
-    item.querySelector('.term-cat').textContent = term.category;
+    item.querySelector('.term-word').textContent = tWord(term.word);
+    item.querySelector('.term-cat').textContent = tCat(term.category);
     item.querySelector('.term-score').textContent = term.similarity.toFixed(3);
     const bar = item.querySelector('.term-bar');
     bar.style.width = (maxSim > 0 ? (term.similarity / maxSim) * 100 : 0) + '%';
@@ -1594,7 +2057,7 @@ function buildCategoryToggles() {
   for (const [cat, info] of Object.entries(STATE.categories)) {
     const btn = document.createElement('span');
     btn.className = 'cat-toggle';
-    btn.textContent = cat;
+    btn.textContent = tCat(cat);
     const color = resolveColor(info.color);
     btn.style.borderColor = color;
     btn.style.color = color;
@@ -1731,7 +2194,7 @@ function renderLoop() {
     if (!termData) continue;
     const [px, py] = tsneToPixel(termData.x, termData.y);
 
-    const labelW = ctx.measureText(termData.word).width + 4;
+    const labelW = ctx.measureText(tWord(termData.word)).width + 4;
     const labelH = 14;
     let bestPos = null;
     const offsets = [
@@ -1763,7 +2226,7 @@ function renderLoop() {
       ctx.fill();
 
       ctx.fillStyle = termData.color;
-      ctx.fillText(termData.word, lx, ly + labelH / 2);
+      ctx.fillText(tWord(termData.word), lx, ly + labelH / 2);
     }
   }
 

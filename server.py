@@ -31,32 +31,31 @@ import umap
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("sobit-mirror")
 
-# ── Global state (populated in startup) ─────────────────────────────────────
+# ── Global state ─────────────────────────────────────────────────────────────
 MODEL = None
 PREPROCESS = None
 TOKENIZER = None
 DEVICE = "cpu"
 TAXONOMY = {}
-TEXT_EMBEDDINGS = None       # (N, D) tensor — one per So-B-IT term
-TEXT_LABELS = []             # list of dicts: {word, category, color}
-FAIRFACE_EMBEDDINGS = {}     # key -> (M, D) tensor for zero-shot classification
-TSNE_COORDS = None           # (N, 2) numpy array — precomputed 2-D layout for terms
-UMAP_MODEL  = None           # fitted UMAP instance — used to project new custom words
-UMAP_MEAN   = None           # mean used to normalise UMAP output to [-1, 1]
-UMAP_SCALE  = None           # scale used to normalise UMAP output to [-1, 1]
+FAIRFACE_EMBEDDINGS = {}   # always English prompts — language-independent
+
+# Per-language state: LANG_STATE[lang] = {text_embeddings, text_labels, tsne_coords,
+#                                         umap_model, umap_mean, umap_scale}
+LANG_STATE = {}
+SUPPORTED_LANGS = ['en']   # extended to ['en','es'] at startup if translations present
+
 MAX_LABELS = 20
-CLIP_BACKEND = "open_clip"   # or "openai_clip"
-args = None                  # parsed CLI args (set in main)
+CLIP_BACKEND = "open_clip"
+args = None
 
 # ── Session / CSV logging ─────────────────────────────────────────────────────
-SESSION_NAME = None          # set via POST /api/session/start
-CSV_PATH = None              # path to the active CSV file
-LOGS_DIR = Path(__file__).parent / "logs"   # overridable in main(), always valid
+SESSION_NAME = None
+CSV_PATH = None
+LOGS_DIR = Path(__file__).parent / "logs"
 LOGS_DIR.mkdir(exist_ok=True)
 
 
 def _auto_open_session(name: str = "default"):
-    """Open a CSV log immediately at startup so words are always recorded."""
     global SESSION_NAME, CSV_PATH
     safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -75,13 +74,8 @@ def _auto_open_session(name: str = "default"):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def load_clip_model(model_name: str, device: str):
-    """
-    Try open_clip first (wider model zoo), fall back to openai clip.
-    Returns (model, preprocess, tokenizer, backend_name).
-    """
     global CLIP_BACKEND
 
-    # ── Try open_clip ────────────────────────────────────────────────────────
     try:
         import open_clip
         oc_map = {
@@ -109,7 +103,6 @@ def load_clip_model(model_name: str, device: str):
     except Exception as e:
         log.warning(f"open_clip failed ({e}), trying openai clip …")
 
-    # ── Fallback: openai clip ────────────────────────────────────────────────
     import clip as openai_clip
     log.info(f"Loading openai clip model {model_name} …")
     model, preprocess = openai_clip.load(model_name, device=device)
@@ -129,13 +122,11 @@ def load_clip_model(model_name: str, device: str):
 
 @torch.no_grad()
 def encode_texts(texts: list[str]) -> torch.Tensor:
-    """Encode a list of text prompts → (N, D) L2-normalised embeddings."""
     tokens = TOKENIZER(texts)
     if isinstance(tokens, torch.Tensor):
         tokens = tokens.to(DEVICE)
     else:
         tokens = {k: v.to(DEVICE) for k, v in tokens.items()}
-
     feats = MODEL.encode_text(tokens)
     feats = F.normalize(feats, dim=-1)
     return feats
@@ -143,7 +134,6 @@ def encode_texts(texts: list[str]) -> torch.Tensor:
 
 @torch.no_grad()
 def encode_image_tensor(img: Image.Image) -> torch.Tensor:
-    """Encode a single PIL image → (1, D) L2-normalised embedding."""
     tensor = PREPROCESS(img).unsqueeze(0).to(DEVICE)
     feats = MODEL.encode_image(tensor)
     feats = F.normalize(feats, dim=-1)
@@ -151,87 +141,111 @@ def encode_image_tensor(img: Image.Image) -> torch.Tensor:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  Precomputation at startup
+#  Prompt builders
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def make_fairface_prompt(attr: str, value: str) -> str:
-    """Generate a natural-language CLIP prompt for a FairFace attribute/value pair."""
-    if attr == "age":
-        return f"a photo of a {value}"
-    elif attr == "gender":
-        return f"a photo of a {value.lower()} person"
-    elif attr == "race":
-        return f"a photo of a {value} person"
-    else:
-        return f"a photo of a {value} person"
-
-
-def make_prompt(word: str, category: str) -> str:
-    """Generate a CLIP prompt for a taxonomy word."""
+def make_prompt(word: str, category: str, lang: str = 'en') -> str:
+    if lang == 'es':
+        return f"una fotografía de {word}"
     occupations_like = {"Occupation", "Political"}
     if category in occupations_like:
         return f"a photo of a {word}"
-    else:
-        return f"a photo of a {word} person"
+    return f"a photo of a {word} person"
 
 
-def build_text_embeddings(taxonomy: dict):
-    """
-    Build text embeddings for every So-B-IT term and FairFace labels.
-    Returns text_embeddings (Tensor), text_labels (list of dicts),
-    fairface_embeddings (dict of Tensors).
-    """
+def make_fairface_prompt(attr: str, value: str) -> str:
+    if attr == "age":
+        return f"a photo of a {value}"
+    return f"a photo of a {value.lower() if attr == 'gender' else value} person"
+
+
+def get_translated_word(taxonomy: dict, en_word: str, lang: str) -> str:
+    """Return the translated word for a given language, falling back to English."""
+    if lang == 'en':
+        return en_word
+    return (taxonomy
+            .get('translations', {})
+            .get(lang, {})
+            .get('words', {})
+            .get(en_word, en_word))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Precomputation helpers
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def build_text_embeddings_for_lang(taxonomy: dict, lang: str):
+    """Encode all So-B-IT terms in the given language. Returns (tensor, labels)."""
     all_prompts = []
     labels = []
-
     for cat_name, cat_data in taxonomy["categories"].items():
         color = cat_data["color"]
-        for word in cat_data["words"]:
-            prompt = make_prompt(word, cat_name)
+        for en_word in cat_data["words"]:
+            word = get_translated_word(taxonomy, en_word, lang)
+            prompt = make_prompt(word, cat_name, lang)
             all_prompts.append(prompt)
-            labels.append({"word": word, "category": cat_name, "color": color})
+            # always store the translated display word, but keep en_word for CSV/dedup
+            labels.append({
+                "word":    word,
+                "en_word": en_word,
+                "category": cat_name,
+                "color":   color,
+            })
 
-    log.info(f"Encoding {len(all_prompts)} So-B-IT prompts …")
+    log.info(f"[{lang}] Encoding {len(all_prompts)} prompts …")
     text_emb = encode_texts(all_prompts)
-    log.info(f"✓ Text embeddings shape: {text_emb.shape}")
+    log.info(f"[{lang}] ✓ Embeddings shape: {text_emb.shape}")
+    return text_emb, labels
 
+
+def build_fairface_embeddings(taxonomy: dict):
     ff = taxonomy.get("fairface_labels", {})
     ff_emb = {}
     for attr, values in ff.items():
         prompts = [make_fairface_prompt(attr, v) for v in values]
         ff_emb[attr] = {"labels": values, "embeddings": encode_texts(prompts)}
         log.info(f"  FairFace/{attr}: {len(values)} classes")
+    return ff_emb
 
-    return text_emb, labels, ff_emb
 
-
-def compute_umap(embeddings: torch.Tensor, n_neighbors: int = 15, seed: int = 42) -> np.ndarray:
-    """Fit UMAP on the text embeddings → (N, 2) coordinates. Stores the fitted model globally."""
-    global UMAP_MODEL, UMAP_MEAN, UMAP_SCALE
+def compute_umap_layout(embeddings: torch.Tensor, n_neighbors: int = 15, seed: int = 42):
+    """Fit UMAP and return (coords, model, mean, scale) — no global side-effects."""
     log.info("Computing UMAP layout …")
     X = embeddings.cpu().numpy().astype(np.float32)
-    UMAP_MODEL = umap.UMAP(
+    model = umap.UMAP(
         n_components=2, n_neighbors=n_neighbors, min_dist=0.1,
         metric='cosine', random_state=seed, n_jobs=1
     )
-    coords = UMAP_MODEL.fit_transform(X)
-    UMAP_MEAN = coords.mean(axis=0)
-    coords = coords - UMAP_MEAN
-    UMAP_SCALE = np.abs(coords).max()
-    if UMAP_SCALE > 0:
-        coords /= UMAP_SCALE
+    coords = model.fit_transform(X)
+    mean = coords.mean(axis=0)
+    coords = coords - mean
+    scale = np.abs(coords).max()
+    if scale > 0:
+        coords /= scale
     log.info(f"✓ UMAP done, shape {coords.shape}")
-    return coords
+    return coords, model, mean, scale
 
 
-def project_new_term(new_emb: torch.Tensor) -> np.ndarray:
-    """
-    Project a new custom word embedding into the existing UMAP space using
-    the fitted model. Applies the same normalisation as the original layout.
-    """
+def init_lang_state(taxonomy: dict, lang: str, n_neighbors: int):
+    """Build embeddings + UMAP for one language and store in LANG_STATE[lang]."""
+    text_emb, labels = build_text_embeddings_for_lang(taxonomy, lang)
+    coords, umap_model, umap_mean, umap_scale = compute_umap_layout(text_emb, n_neighbors)
+    LANG_STATE[lang] = {
+        'text_embeddings': text_emb,
+        'text_labels':     labels,
+        'tsne_coords':     coords,
+        'umap_model':      umap_model,
+        'umap_mean':       umap_mean,
+        'umap_scale':      umap_scale,
+    }
+    log.info(f"[{lang}] ✓ Language state ready")
+
+
+def project_new_term(new_emb: torch.Tensor, lang: str = 'en') -> np.ndarray:
+    st = LANG_STATE[lang]
     X = new_emb.cpu().numpy().astype(np.float32)
-    coords = UMAP_MODEL.transform(X)[0]
-    coords = (coords - UMAP_MEAN) / UMAP_SCALE
+    coords = st['umap_model'].transform(X)[0]
+    coords = (coords - st['umap_mean']) / st['umap_scale']
     return coords
 
 
@@ -240,23 +254,21 @@ def project_new_term(new_emb: torch.Tensor) -> np.ndarray:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @torch.no_grad()
-def process_frame(img: Image.Image, top_k: int = 15, categories: set = None) -> dict:
-    """
-    Given a webcam frame (PIL), return:
-    - top_k closest So-B-IT terms with similarity scores (filtered to active categories)
-    - zero-shot FairFace classification probabilities
-    - user embedding projected to t-SNE space
-    """
+def process_frame(img: Image.Image, top_k: int = 15,
+                  categories: set = None, lang: str = 'en') -> dict:
+    if lang not in LANG_STATE:
+        lang = 'en'
+    st = LANG_STATE[lang]
+
     t0 = time.time()
+    img_emb = encode_image_tensor(img)
+    sims = (img_emb @ st['text_embeddings'].T).squeeze(0).cpu().numpy()
 
-    img_emb = encode_image_tensor(img)  # (1, D)
-    sims = (img_emb @ TEXT_EMBEDDINGS.T).squeeze(0).cpu().numpy()  # (N,)
-
-    # Filter candidate indices to active categories (if provided)
     if categories:
-        candidate_idx = [i for i, l in enumerate(TEXT_LABELS) if l["category"] in categories]
+        candidate_idx = [i for i, l in enumerate(st['text_labels'])
+                         if l["category"] in categories]
     else:
-        candidate_idx = list(range(len(TEXT_LABELS)))
+        candidate_idx = list(range(len(st['text_labels'])))
 
     candidate_idx = np.array(candidate_idx)
     top_idx = candidate_idx[np.argsort(sims[candidate_idx])[::-1][:top_k]]
@@ -264,11 +276,12 @@ def process_frame(img: Image.Image, top_k: int = 15, categories: set = None) -> 
     top_terms = []
     for idx in top_idx:
         idx = int(idx)
-        entry = TEXT_LABELS[idx]
+        entry = st['text_labels'][idx]
         top_terms.append({
-            "word": entry["word"],
+            "word":     entry["word"],
+            "en_word":  entry["en_word"],
             "category": entry["category"],
-            "color": entry["color"],
+            "color":    entry["color"],
             "similarity": round(float(sims[idx]), 4),
         })
 
@@ -281,31 +294,28 @@ def process_frame(img: Image.Image, top_k: int = 15, categories: set = None) -> 
             for label, p in zip(data["labels"], probs)
         }
 
-    user_tsne = project_to_tsne(img_emb, categories=categories)
+    user_tsne = project_to_tsne(img_emb, categories=categories, lang=lang)
     elapsed = time.time() - t0
 
     return {
-        "top_terms": top_terms,
-        "fairface": fairface,
-        "user_tsne": user_tsne,
+        "top_terms":    top_terms,
+        "fairface":     fairface,
+        "user_tsne":    user_tsne,
         "inference_ms": round(elapsed * 1000, 1),
     }
 
 
-def project_to_tsne(img_emb: torch.Tensor, categories: set = None) -> list:
-    """
-    Project the live user embedding into the UMAP 2D space for the current frame.
-    Projection mode is controlled by --projection CLI arg:
-      top1     (default) always follow the single closest term — clearest signal
-      softmax             weighted average with softmax temperature τ — sharper than raw cosine
-      weighted            weighted average with raw cosine similarities (original behaviour)
-      transform           use umap.transform() — accurate but slow, for powerful hardware only
-    """
+def project_to_tsne(img_emb: torch.Tensor, categories: set = None,
+                    lang: str = 'en') -> list:
+    if lang not in LANG_STATE:
+        lang = 'en'
+    st = LANG_STATE[lang]
     mode = args.projection if args else 'top1'
 
-    sims = (img_emb @ TEXT_EMBEDDINGS.T).squeeze(0).cpu().numpy()
+    sims = (img_emb @ st['text_embeddings'].T).squeeze(0).cpu().numpy()
     if categories:
-        candidate_idx = np.array([i for i, l in enumerate(TEXT_LABELS) if l["category"] in categories])
+        candidate_idx = np.array([i for i, l in enumerate(st['text_labels'])
+                                   if l["category"] in categories])
     else:
         candidate_idx = np.arange(len(sims))
 
@@ -314,13 +324,13 @@ def project_to_tsne(img_emb: torch.Tensor, categories: set = None) -> list:
 
     if mode == 'transform':
         X = img_emb.cpu().numpy().astype(np.float32)
-        coords = UMAP_MODEL.transform(X)[0]
-        coords = (coords - UMAP_MEAN) / UMAP_SCALE
+        coords = st['umap_model'].transform(X)[0]
+        coords = (coords - st['umap_mean']) / st['umap_scale']
         return [round(float(coords[0]), 4), round(float(coords[1]), 4)]
 
     if mode == 'top1':
         best = candidate_idx[np.argmax(sims[candidate_idx])]
-        pos = TSNE_COORDS[int(best)]
+        pos = st['tsne_coords'][int(best)]
         return [round(float(pos[0]), 4), round(float(pos[1]), 4)]
 
     k = min(10, len(candidate_idx))
@@ -329,16 +339,16 @@ def project_to_tsne(img_emb: torch.Tensor, categories: set = None) -> list:
     if mode == 'softmax':
         tau = args.projection_tau if args else 0.1
         logits = sims[top_idx] / tau
-        logits -= logits.max()  # numerical stability
+        logits -= logits.max()
         weights = np.exp(logits)
-    else:  # weighted
+    else:
         weights = np.maximum(sims[top_idx], 0)
 
     w_sum = weights.sum()
     if w_sum < 1e-8:
         return [0.0, 0.0]
     weights /= w_sum
-    pos = (TSNE_COORDS[top_idx] * weights[:, None]).sum(axis=0)
+    pos = (st['tsne_coords'][top_idx] * weights[:, None]).sum(axis=0)
     return [round(float(pos[0]), 4), round(float(pos[1]), 4)]
 
 
@@ -363,52 +373,62 @@ async def favicon():
 
 
 @app.get("/api/init")
-async def api_init():
-    """Return taxonomy metadata, t-SNE coords, and config for the frontend."""
+async def api_init(lang: str = 'en'):
+    """Return taxonomy metadata, UMAP coords, and translations for the frontend."""
+    if lang not in LANG_STATE:
+        lang = 'en'
+    st = LANG_STATE[lang]
+
     terms = []
-    for i, label in enumerate(TEXT_LABELS):
+    for i, label in enumerate(st['text_labels']):
         terms.append({
-            "word": label["word"],
+            "word":     label["word"],
+            "en_word":  label["en_word"],
             "category": label["category"],
-            "color": label["color"],
-            "x": round(float(TSNE_COORDS[i, 0]), 4),
-            "y": round(float(TSNE_COORDS[i, 1]), 4),
+            "color":    label["color"],
+            "x": round(float(st['tsne_coords'][i, 0]), 4),
+            "y": round(float(st['tsne_coords'][i, 1]), 4),
         })
 
     categories = {}
     for cat_name, cat_data in TAXONOMY["categories"].items():
         categories[cat_name] = {"color": cat_data["color"], "count": len(cat_data["words"])}
 
+    # Send category label translations so the frontend doesn't need them hardcoded
+    cat_labels = (TAXONOMY
+                  .get('translations', {})
+                  .get(lang, {})
+                  .get('categories', {}))
+
     return {
-        "terms": terms,
-        "categories": categories,
+        "terms":           terms,
+        "categories":      categories,
+        "category_labels": cat_labels,
         "fairface_labels": TAXONOMY.get("fairface_labels", {}),
-        "max_labels": MAX_LABELS,
-        "model": args.model,
+        "max_labels":      MAX_LABELS,
+        "model":           args.model,
+        "lang":            lang,
+        "supported_langs": SUPPORTED_LANGS,
     }
 
 
 # ── Session / CSV helpers ─────────────────────────────────────────────────────
 
-CSV_COLUMNS = ["timestamp", "session", "word", "category", "tsne_x", "tsne_y"]
+CSV_COLUMNS = ["timestamp", "session", "word", "en_word", "category", "lang", "tsne_x", "tsne_y"]
 
 
 def open_csv(path: Path):
-    """Create the CSV file and write the header row."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
-        writer.writeheader()
+        csv.DictWriter(f, fieldnames=CSV_COLUMNS).writeheader()
     log.info(f"CSV log opened at {path}")
 
 
 def append_csv(row: dict):
-    """Append one word entry to the active CSV. No-op if no session is active."""
     if CSV_PATH is None:
         return
     with open(CSV_PATH, "a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
-        writer.writerow(row)
+        csv.DictWriter(f, fieldnames=CSV_COLUMNS).writerow(row)
 
 
 class StartSessionRequest(BaseModel):
@@ -417,29 +437,23 @@ class StartSessionRequest(BaseModel):
 
 @app.post("/api/session/start")
 async def session_start(req: StartSessionRequest):
-    """Open a new CSV log file for this session."""
     global SESSION_NAME, CSV_PATH
-
     raw = req.name.strip() or "unnamed"
-    # Sanitise for use in filenames
     safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in raw)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"session_{safe}_{timestamp}.csv"
     CSV_PATH = LOGS_DIR / filename
     SESSION_NAME = raw
-
     open_csv(CSV_PATH)
-
     return {"status": "ok", "session": SESSION_NAME, "file": filename}
 
 
 @app.get("/api/session")
 async def session_info():
-    """Return current session state."""
     return {
-        "active": SESSION_NAME is not None,
+        "active":  SESSION_NAME is not None,
         "session": SESSION_NAME,
-        "file": CSV_PATH.name if CSV_PATH else None,
+        "file":    CSV_PATH.name if CSV_PATH else None,
     }
 
 
@@ -447,17 +461,14 @@ from fastapi.responses import StreamingResponse
 
 @app.get("/api/export")
 async def export_csv():
-    """Download the current session CSV. Returns 404 if no session is active."""
     if CSV_PATH is None or not CSV_PATH.exists():
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="No active session or file not found.")
-
     content = CSV_PATH.read_text(encoding="utf-8")
-    filename = CSV_PATH.name
     return StreamingResponse(
         iter([content]),
         media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f'attachment; filename="{CSV_PATH.name}"'},
     )
 
 
@@ -465,106 +476,109 @@ async def export_csv():
 
 CUSTOM_COLOR = "#FFFFFF"
 
+
 class AddWordRequest(BaseModel):
     word: str
     category: str = "Custom"
     color: str = CUSTOM_COLOR
+    lang: str = "en"
 
 
 @app.post("/api/add_word")
 async def add_word(req: AddWordRequest):
-    """
-    Embed a new word live and append it to the global state.
-    The t-SNE position is interpolated from the nearest existing terms
-    so the existing layout is not disturbed.
-    """
-    global TEXT_EMBEDDINGS, TEXT_LABELS, TSNE_COORDS
-
     word = req.word.strip().lower()
+    lang = req.lang if req.lang in LANG_STATE else 'en'
+
     if not word:
         return {"status": "error", "message": "Empty word"}
 
-    # Duplicate check (same word + same category)
-    if any(l["word"] == word and l["category"] == req.category for l in TEXT_LABELS):
+    st = LANG_STATE[lang]
+    if any(l["en_word"] == word and l["category"] == req.category
+           for l in st['text_labels']):
         return {"status": "duplicate", "word": word}
 
-    # Embed the new word using the same prompt template
-    prompt = make_prompt(word, req.category)
-    log.info(f"Embedding custom word: '{word}' (prompt: '{prompt}')")
-    new_emb = encode_texts([prompt])  # (1, D)
+    prompt = make_prompt(word, req.category, lang)
+    log.info(f"[{lang}] Embedding custom word: '{word}' (prompt: '{prompt}')")
+    new_emb = encode_texts([prompt])
 
-    # Project into existing UMAP space using the fitted model
-    tsne_pos = project_new_term(new_emb)
+    tsne_pos = project_new_term(new_emb, lang)
 
-    # Append to global tensors / lists — thread-safe enough for a workshop context
-    TEXT_EMBEDDINGS = torch.cat([TEXT_EMBEDDINGS, new_emb], dim=0)
-    TEXT_LABELS.append({"word": word, "category": req.category, "color": req.color})
-    TSNE_COORDS = np.vstack([TSNE_COORDS, tsne_pos])
+    st['text_embeddings'] = torch.cat([st['text_embeddings'], new_emb], dim=0)
+    st['text_labels'].append({
+        "word":    word,
+        "en_word": word,
+        "category": req.category,
+        "color":   req.color,
+    })
+    st['tsne_coords'] = np.vstack([st['tsne_coords'], tsne_pos])
 
-    # Also register the word in the in-memory taxonomy so /api/init stays consistent
     if req.category in TAXONOMY["categories"]:
         if word not in TAXONOMY["categories"][req.category]["words"]:
             TAXONOMY["categories"][req.category]["words"].append(word)
     else:
         TAXONOMY["categories"][req.category] = {"color": req.color, "words": [word]}
 
-    log.info(f"✓ Added '{word}' at t-SNE ({tsne_pos[0]:.3f}, {tsne_pos[1]:.3f})")
+    log.info(f"[{lang}] ✓ Added '{word}' at ({tsne_pos[0]:.3f}, {tsne_pos[1]:.3f})")
 
-    # Log to CSV if a session is active
     append_csv({
         "timestamp": datetime.now().isoformat(timespec="seconds"),
-        "session": SESSION_NAME or "",
-        "word": word,
-        "category": req.category,
-        "tsne_x": round(float(tsne_pos[0]), 4),
-        "tsne_y": round(float(tsne_pos[1]), 4),
+        "session":   SESSION_NAME or "",
+        "word":      word,
+        "en_word":   word,
+        "category":  req.category,
+        "lang":      lang,
+        "tsne_x":    round(float(tsne_pos[0]), 4),
+        "tsne_y":    round(float(tsne_pos[1]), 4),
     })
 
     return {
-        "status": "ok",
-        "word": word,
+        "status":   "ok",
+        "word":     word,
         "category": req.category,
-        "color": req.color,
+        "color":    req.color,
         "x": round(float(tsne_pos[0]), 4),
         "y": round(float(tsne_pos[1]), 4),
     }
 
 
 @app.delete("/api/custom_words/{word}")
-async def remove_custom_word(word: str):
-    """Remove a single custom word from the session by name."""
-    global TEXT_EMBEDDINGS, TEXT_LABELS, TSNE_COORDS
-
-    keep = [i for i, l in enumerate(TEXT_LABELS) if not (l["word"] == word and l["category"] == "Custom")]
-    if len(keep) == len(TEXT_LABELS):
+async def remove_custom_word(word: str, lang: str = 'en'):
+    if lang not in LANG_STATE:
+        lang = 'en'
+    st = LANG_STATE[lang]
+    keep = [i for i, l in enumerate(st['text_labels'])
+            if not (l["en_word"] == word and l["category"] == "Custom")]
+    if len(keep) == len(st['text_labels']):
         return {"status": "not_found", "word": word}
 
-    TEXT_EMBEDDINGS = TEXT_EMBEDDINGS[keep]
-    TEXT_LABELS = [TEXT_LABELS[i] for i in keep]
-    TSNE_COORDS = TSNE_COORDS[keep]
+    st['text_embeddings'] = st['text_embeddings'][keep]
+    st['text_labels']     = [st['text_labels'][i] for i in keep]
+    st['tsne_coords']     = st['tsne_coords'][keep]
 
     if "Custom" in TAXONOMY["categories"] and word in TAXONOMY["categories"]["Custom"]["words"]:
         TAXONOMY["categories"]["Custom"]["words"].remove(word)
 
-    log.info(f"Removed custom word: '{word}'")
+    log.info(f"[{lang}] Removed custom word: '{word}'")
     return {"status": "ok", "word": word}
 
 
 @app.delete("/api/custom_words")
-async def clear_custom_words():
-    """Remove all custom words from the session (does not affect So-B-IT terms)."""
-    global TEXT_EMBEDDINGS, TEXT_LABELS, TSNE_COORDS
+async def clear_custom_words(lang: str = 'en'):
+    if lang not in LANG_STATE:
+        lang = 'en'
+    st = LANG_STATE[lang]
+    keep = [i for i, l in enumerate(st['text_labels']) if l["category"] != "Custom"]
+    removed = len(st['text_labels']) - len(keep)
 
-    keep = [i for i, l in enumerate(TEXT_LABELS) if l["category"] != "Custom"]
-    TEXT_EMBEDDINGS = TEXT_EMBEDDINGS[keep]
-    TEXT_LABELS = [TEXT_LABELS[i] for i in keep]
-    TSNE_COORDS = TSNE_COORDS[keep]
+    st['text_embeddings'] = st['text_embeddings'][keep]
+    st['text_labels']     = [st['text_labels'][i] for i in keep]
+    st['tsne_coords']     = st['tsne_coords'][keep]
 
     if "Custom" in TAXONOMY["categories"]:
         TAXONOMY["categories"]["Custom"]["words"] = []
 
-    log.info("Cleared all custom words")
-    return {"status": "ok", "removed": len(TEXT_LABELS) - len(keep)}
+    log.info(f"[{lang}] Cleared {removed} custom words")
+    return {"status": "ok", "removed": removed}
 
 
 # ── WebSocket ─────────────────────────────────────────────────────────────────
@@ -585,9 +599,11 @@ async def websocket_endpoint(ws: WebSocket):
                 img_bytes = base64.b64decode(img_b64)
                 img = Image.open(BytesIO(img_bytes)).convert("RGB")
 
-                top_k = msg.get("top_k", MAX_LABELS)
+                top_k     = msg.get("top_k", MAX_LABELS)
                 categories = set(msg["categories"]) if msg.get("categories") else None
-                result = process_frame(img, top_k=top_k, categories=categories)
+                lang      = msg.get("lang", "en")
+
+                result = process_frame(img, top_k=top_k, categories=categories, lang=lang)
                 result["type"] = "result"
                 await ws.send_text(json.dumps(result))
 
@@ -603,60 +619,64 @@ async def websocket_endpoint(ws: WebSocket):
 
 def parse_args():
     p = argparse.ArgumentParser(description="InterVisions So-B-IT Broken Mirror — CLIP Bias Audit Tool")
-    p.add_argument("--model", default="ViT-B/32",
-                   help="CLIP model name (default: ViT-B/32)")
-    p.add_argument("--device", default="auto",
-                   help="Device: cuda, cpu, or auto (default: auto)")
-    p.add_argument("--port", type=int, default=8765,
-                   help="Server port (default: 8765)")
-    p.add_argument("--host", default="0.0.0.0",
-                   help="Server host (default: 0.0.0.0)")
-    p.add_argument("--max-labels", type=int, default=20,
-                   help="Max number of labels to show in the t-SNE plot (default: 20)")
-    p.add_argument("--top-k", type=int, default=15,
-                   help="Default number of top terms returned (default: 15)")
-    p.add_argument("--taxonomy", default=None,
-                   help="Path to custom taxonomy JSON (default: config/sobit_taxonomy.json)")
-    p.add_argument("--umap-neighbors", type=int, default=15,
-                   help="UMAP n_neighbors parameter (default: 15)")
+    p.add_argument("--model", default="ViT-B/32")
+    p.add_argument("--device", default="auto")
+    p.add_argument("--port", type=int, default=8765)
+    p.add_argument("--host", default="0.0.0.0")
+    p.add_argument("--max-labels", type=int, default=20)
+    p.add_argument("--top-k", type=int, default=15)
+    p.add_argument("--taxonomy", default=None)
+    p.add_argument("--umap-neighbors", type=int, default=15)
     p.add_argument("--projection", default="top1",
-                   choices=["softmax", "weighted", "top1", "transform"],
-                   help="User dot projection mode (default: top1)")
-    p.add_argument("--projection-tau", type=float, default=0.1,
-                   help="Softmax temperature for projection; lower = sharper (default: 0.1)")
+                   choices=["softmax", "weighted", "top1", "transform"])
+    p.add_argument("--projection-tau", type=float, default=0.1)
+    p.add_argument("--langs", default=None,
+                   help="Comma-separated languages to load (default: all available). E.g. en,es")
     return p.parse_args()
 
 
 def main():
     global MODEL, PREPROCESS, TOKENIZER, DEVICE, TAXONOMY
-    global TEXT_EMBEDDINGS, TEXT_LABELS, FAIRFACE_EMBEDDINGS, TSNE_COORDS
-    global UMAP_MODEL, UMAP_MEAN, UMAP_SCALE
-    global MAX_LABELS, args
+    global FAIRFACE_EMBEDDINGS, MAX_LABELS, args
+    global SUPPORTED_LANGS
 
     args = parse_args()
     MAX_LABELS = args.max_labels
 
-    if args.device == "auto":
-        DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-    else:
-        DEVICE = args.device
+    DEVICE = ("cuda" if torch.cuda.is_available() else "cpu") if args.device == "auto" else args.device
     log.info(f"Device: {DEVICE}")
 
     MODEL, PREPROCESS, TOKENIZER, _ = load_clip_model(args.model, DEVICE)
 
     tax_path = args.taxonomy or str(Path(__file__).parent / "config" / "sobit_taxonomy.json")
-    with open(tax_path) as f:
+    with open(tax_path, encoding="utf-8") as f:
         TAXONOMY = json.load(f)
     log.info(f"Loaded taxonomy from {tax_path}")
 
-    # Register Custom category so it's available from the start
     if "Custom" not in TAXONOMY["categories"]:
         TAXONOMY["categories"]["Custom"] = {"color": CUSTOM_COLOR, "words": []}
 
-    TEXT_EMBEDDINGS, TEXT_LABELS, FAIRFACE_EMBEDDINGS = build_text_embeddings(TAXONOMY)
-    TSNE_COORDS = compute_umap(TEXT_EMBEDDINGS, n_neighbors=args.umap_neighbors)
+    # Determine which languages to initialise
+    available = ['en']
+    if 'translations' in TAXONOMY:
+        available += [l for l in TAXONOMY['translations'] if l != 'en']
 
-    # Open a default CSV so words are logged even without pressing Start Session
+    if args.langs:
+        requested = [l.strip() for l in args.langs.split(',')]
+        langs_to_init = [l for l in requested if l in available]
+    else:
+        langs_to_init = available
+
+    SUPPORTED_LANGS = langs_to_init
+    log.info(f"Initialising languages: {SUPPORTED_LANGS}")
+
+    # Build FairFace embeddings once (English prompts, language-independent)
+    FAIRFACE_EMBEDDINGS = build_fairface_embeddings(TAXONOMY)
+
+    # Build embeddings + UMAP for each language
+    for lang in SUPPORTED_LANGS:
+        init_lang_state(TAXONOMY, lang, args.umap_neighbors)
+
     _auto_open_session("default")
 
     import uvicorn
