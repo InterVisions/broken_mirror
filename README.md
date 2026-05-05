@@ -1,155 +1,161 @@
-# InterVisions - So-B-IT Broken Mirror — Interactive CLIP Bias Audit Tool
+# Broken Mirror — Interactive CLIP Bias Audit Tool
 
-**An immersive, real-time workshop experience that reveals how CLIP vision-language models perceive human faces through the lens of social bias.**
+**InterVisions · So-B-IT**
 
-Participants see their own webcam feed while the app shows, in real time:
-- The **closest So-B-IT taxonomy terms** (374 bias-relevant words across 9 categories) that CLIP associates with their face
-- A **UMAP scatter plot** of all So-B-IT term embeddings, with their face embedding shown as a moving star
-- **Zero-shot FairFace predictions** (race, gender, age probability distributions via softmax)
-- **Custom words** — participants can add their own words beyond the So-B-IT taxonomy and see them embedded live in the UMAP space
-- **Session logging** — word interactions are recorded to CSV for later analysis
-- **Freeze** — pause the camera stream on the last frame to discuss a result without distraction
+A real-time web tool for exposing and exploring the stereotypes embedded in CLIP vision-language models. Point a webcam at a face (or upload an image) and watch which bias-loaded words the model associates with it — occupations, personality traits, appearance descriptors, archetypes, and more — plotted live in an interactive UMAP embedding space.
 
-Change your expression, put on a hat, move the camera — and watch the model's perception shift in real time.
-
-![Broken Mirror screenshot](Screenshot20260314.png)
+![Broken Mirror UI](Screenshot20260314.png)
 
 ---
 
-## Architecture
+## What it does
+
+CLIP assigns similarity scores between an image and a large vocabulary of text prompts. Broken Mirror makes that process transparent and explorable:
+
+- **Live inference** — streams webcam frames over WebSocket; results update in real time
+- **UMAP scatter plot** — all bias terms are embedded and projected into 2D; your image lands as a star on the map, showing where it sits in the model's conceptual space
+- **Top-term panel** — ranked list of the highest-similarity words for the current frame, with similarity scores
+- **FairFace classifier** — alongside CLIP, a demographic classifier estimates perceived race, gender, and age group for reference
+- **Category filtering** — toggle which bias categories (Appearance, Behavioral, Criminal Justice, Healthcare, Occupation, Archetype, …) are active
+- **Custom words** — add your own terms on the fly; they are embedded and placed on the map immediately
+- **Session logging** — every inference result is written to a timestamped CSV for later analysis
+- **Language support** — UI available in English and Spanish; embeddings are computed once in English (CLIP is not multilingual), Spanish labels are display-only
+
+---
+
+## Bias categories
+
+| Category | Description |
+|---|---|
+| Appearance | Physical descriptors (beautiful, fat, muscular, …) |
+| Behavioral | Personality and emotional traits (aggressive, nurturing, docile, …) |
+| Education & Wealth | Socioeconomic terms (elite, undocumented, working-class, …) |
+| Criminal Justice | Crime-associated labels (thug, gangster, terrorist, …) |
+| Healthcare | Medical and health-related stereotypes (obese, mentally ill, …) |
+| Portrayal in Media | Media framing terms (exotic, primitive, hypersexual, …) |
+| Political | Political labels (socialist, anarchist, nationalist, …) |
+| Religion | Religious identities and traits (fanatical, fundamentalist, …) |
+| Occupation | ~150 job titles (CEO, maid, surgeon, janitor, …) |
+| Archetype | Jungian archetypes (hero, shadow, ruler, orphan, …) |
+| Custom | Your own terms, added at runtime |
+
+---
+
+## Requirements
+
+- Python 3.10+
+- A CUDA-capable GPU is recommended but not required (CPU works, slower)
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  Browser (fullscreen)                                          │
-│  ┌─────────────────┐  ┌────────────────┐  ┌───────────────┐  │
-│  │ Left panel      │  │ UMAP Canvas    │  │ Right panel   │  │
-│  │ - Webcam feed   │  │ (animated)     │  │ - Cat. filters│  │
-│  │ - Freeze btn    │  │                │  │ - Custom words│  │
-│  │ - Session log   │  │                │  │ - Top-K terms │  │
-│  │ - FairFace bars │  └────────────────┘  └───────────────┘  │
-│  └────────┬────────┘                                          │
-│           │ JPEG frames via WebSocket                         │
-│           ▼                                                   │
-├───────────────────────────────────────────────────────────────┤
-│  FastAPI + WebSocket Server (Python)                          │
-│  ┌──────────────┐  ┌──────────────────────────────────────┐  │
-│  │ CLIP Model   │  │ Precomputed at startup:              │  │
-│  │ (PyTorch/GPU)│  │ - So-B-IT text embeddings            │  │
-│  │              │  │ - UMAP 2D coordinates + fitted model │  │
-│  │ encode_image │  │ - FairFace label embeddings          │  │
-│  └──────────────┘  └──────────────────────────────────────┘  │
-└───────────────────────────────────────────────────────────────┘
+torch>=2.0
+torchvision>=0.15
+open-clip-torch>=2.20.0
+Pillow>=9.0
+numpy>=1.24
+scikit-learn>=1.2
+umap-learn>=0.5
+fastapi>=0.100
+uvicorn[standard]>=0.22
+websockets>=11.0
 ```
 
-## Quick Start
-
-### 1. Install dependencies
+Install:
 
 ```bash
-# Create a virtual environment (recommended)
-python3 -m venv venv
-source venv/bin/activate
-
-# Install requirements
 pip install -r requirements.txt
 ```
 
-> **Note:** PyTorch with CUDA support should be installed separately if not already present. See https://pytorch.org/get-started/locally/
+---
 
-### 2. Run the server
+## Usage
 
 ```bash
-# Basic (will use ViT-B/32 on GPU if available)
 python server.py
-
-# Custom model and settings
-python server.py --model ViT-L/14 --max-labels 25 --port 8000 --device cuda
 ```
 
-### 3. Open in browser
+Then open [http://localhost:8765](http://localhost:8765) in your browser.
 
-Navigate to `http://localhost:8765` (or your custom port). Press **F11** for fullscreen.
+### Options
 
-Allow camera access when prompted.
-
----
-
-## Command-Line Parameter
-| Parameter | Default | Description |
+| Flag | Default | Description |
 |---|---|---|
-| `--model` | `ViT-B/32` | CLIP model. Options: `ViT-B/32`, `ViT-B/16`, `ViT-L/14`, `ViT-H/14`, or any `open_clip` model string like `ViT-B-32:laion2b_s34b_b79k` |
-| `--device` | `auto` | `cuda`, `cpu`, or `auto` (auto-detects GPU) |
-| `--port` | `8765` | Server port |
-| `--host` | `0.0.0.0` | Server host (0.0.0.0 = accessible from other machines on the network) |
-| `--max-labels` | `20` | Maximum number of text labels shown on the t-SNE plot |
-| `--top-k` | `15` | Default number of top terms returned per frame |
-| `--taxonomy` | `config/sobit_taxonomy.json` | Path to custom taxonomy JSON |
-| `--umap-neighbors` | `15` | UMAP `n_neighbors` parameter — higher = more global structure |
-| `--projection` | `top1` | User dot projection mode: `top1` (follow closest term), `softmax` (temperature-weighted average), `weighted` (cosine-weighted average), `transform` (exact via `umap.transform`, slow) |
-| `--projection-tau` | `0.1` | Softmax temperature for `softmax` projection mode; lower = sharper |
+| `--model` | `ViT-B/32` | CLIP model. Any `open_clip` arch or `ViT-B/16`, `ViT-L/14`, `ViT-H/14` |
+| `--device` | `auto` | `cuda`, `cpu`, or `auto` |
+| `--port` | `8765` | HTTP/WebSocket port |
+| `--host` | `0.0.0.0` | Bind address |
+| `--max-labels` | `20` | Max terms shown in the top-term panel |
+| `--top-k` | `15` | Top-k terms returned per frame |
+| `--umap-neighbors` | `15` | UMAP `n_neighbors` parameter |
+| `--projection` | `top1` | How the image is projected onto the map: `top1`, `softmax`, `weighted`, `transform` |
+| `--taxonomy` | built-in | Path to a custom taxonomy JSON |
+
+Example with a larger model on GPU:
+
+```bash
+python server.py --model ViT-L/14 --device cuda --max-labels 30
+```
 
 ---
 
-## Customising the Taxonomy
+## Taxonomy format
 
-Edit `config/sobit_taxonomy.json` to add/remove words or categories. The format is:
+The bias vocabulary lives in `config/sobit_taxonomy.json`. You can swap in your own:
 
 ```json
 {
   "categories": {
-    "Category Name": {
-      "color": "#hex_color",
-      "words": ["word1", "word2", "..."]
+    "My Category": {
+      "color": "#FF6B6B",
+      "words": ["word1", "word2"]
     }
   },
-  "fairface_labels": {
-    "race": ["White", "Black", "..."],
-    "gender": ["Male", "Female"],
-    "age": ["0-2", "3-9", "..."]
+  "fairface_labels": { ... },
+  "translations": {
+    "es": {
+      "categories": { "My Category": "Mi Categoría" },
+      "words": { "word1": "palabra1" }
+    }
   }
 }
 ```
 
-The UMAP layout and text embeddings are recomputed at startup when the taxonomy changes.
+---
+
+## Session logs
+
+Each server start opens a CSV log automatically under `logs/`. You can also start a named session from the UI or via the API, and export it:
+
+```
+GET /api/export
+```
+
+CSV columns: `timestamp`, `session`, `word`, `en_word`, `category`, `lang`, `tsne_x`, `tsne_y`
 
 ---
 
-## Workshop Tips
+## API reference
 
-- **Two-machine setup:** Run the server on the GPU machine, open the browser on the presentation machine. Use `--host 0.0.0.0` and connect via the GPU machine's IP.
-- **Projector:** The dark theme is designed for projection. Use fullscreen (F11).
-- **Interaction ideas:** Ask participants to:
-  - Smile vs. frown — watch behavioral terms shift
-  - Put on/remove glasses, hats, scarves
-  - Multiple people in frame
-  - Cover face partially
-- **Category filters:** Toggle categories on/off in the sidebar to focus discussion on specific bias types.
-- **Discussion prompts:** "Why does the model think X?" → trace back to training data biases (LAION dataset composition).
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/init?lang=en` | GET | Returns all terms, UMAP coords, and category metadata |
+| `/api/session/start` | POST | Start a named session `{"name": "my-session"}` |
+| `/api/session` | GET | Current session info |
+| `/api/export` | GET | Download session CSV |
+| `/api/add_word` | POST | Add a custom word `{"word": "...", "category": "Custom"}` |
+| `/api/custom_words/{word}` | DELETE | Remove a custom word |
+| `/api/custom_words` | DELETE | Clear all custom words |
+| `/ws` | WebSocket | Stream frames, receive inference results |
 
 ---
 
-## Project Structure
+## Project context
 
-```
-sobit-mirror/
-├── server.py                    # FastAPI backend + CLIP inference
-├── requirements.txt
-├── config/
-│   └── sobit_taxonomy.json      # So-B-IT taxonomy (editable)
-├── static/
-│   └── index.html               # Full frontend (single file)
-└── README.md
-```
+Broken Mirror is part of **[InterVisions](https://intervisions.eu)** — a European research project investigating bias, representation, and fairness in AI systems. The So-B-IT (Stereotypes in Bias IT) framework provides the vocabulary and methodology underpinning this tool.
 
-## Known Limitations & Disclaimers
+Built at the **[Computer Vision Center (CVC)](https://www.cvc.uab.es)**, Universitat Autònoma de Barcelona.
 
-- **Age label cultural relativity.** Age categories (e.g. young adult, middle-aged, elderly) are expressed in natural language anchored to life expectancy norms typical of high-income, Western contexts. For example, in Lesotho, where life expectancy sits around 54 years, a person aged 45 might reasonably be considered elderly, while the same label in a Western European context would typically apply to someone in their late 60s or beyond. This means age predictions should be interpreted with caution, and when working with participants from the Global South or migrant communities, the labels themselves may be worth questioning out loud as part of the audit.
+---
 
+## License
 
-## Credits
-
-- **So-B-IT Taxonomy:** Hamidieh et al., "Identifying Implicit Social Biases in Vision-Language Models" (2024). arXiv:2411.00997
-- **CLIP:** Radford et al., "Learning Transferable Visual Models From Natural Language Supervision" (2021)
-- **FairFace labels:** Kärkkäinen & Joo, "FairFace: Face Attribute Dataset for Balanced Race, Gender, and Age" (2019)
-
-Built for the InterVisions (GAP-101214711) EU project workshop on AI bias auditing.
+MIT © 2025–2026 Computer Vision Center (CVC-CERCA), Universitat Autònoma de Barcelona, and the InterVisions consortium. See [LICENSE](LICENSE).

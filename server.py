@@ -144,9 +144,7 @@ def encode_image_tensor(img: Image.Image) -> torch.Tensor:
 #  Prompt builders
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def make_prompt(word: str, category: str, lang: str = 'en') -> str:
-    if lang == 'es':
-        return f"una fotografía de {word}"
+def make_prompt(word: str, category: str) -> str:
     occupations_like = {"Occupation", "Political"}
     if category in occupations_like:
         return f"a photo of a {word}"
@@ -174,27 +172,26 @@ def get_translated_word(taxonomy: dict, en_word: str, lang: str) -> str:
 #  Precomputation helpers
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def build_text_embeddings_for_lang(taxonomy: dict, lang: str):
-    """Encode all So-B-IT terms in the given language. Returns (tensor, labels)."""
+def build_text_embeddings(taxonomy: dict):
+    """Encode all So-B-IT terms in English once (CLIP is English-only).
+    Spanish and other languages are display-only; embeddings are reused."""
     all_prompts = []
     labels = []
     for cat_name, cat_data in taxonomy["categories"].items():
         color = cat_data["color"]
         for en_word in cat_data["words"]:
-            word = get_translated_word(taxonomy, en_word, lang)
-            prompt = make_prompt(word, cat_name, lang)
+            prompt = make_prompt(en_word, cat_name)
             all_prompts.append(prompt)
-            # always store the translated display word, but keep en_word for CSV/dedup
             labels.append({
-                "word":    word,
-                "en_word": en_word,
+                "word":     en_word,
+                "en_word":  en_word,
                 "category": cat_name,
-                "color":   color,
+                "color":    color,
             })
 
-    log.info(f"[{lang}] Encoding {len(all_prompts)} prompts …")
+    log.info(f"Encoding {len(all_prompts)} English prompts …")
     text_emb = encode_texts(all_prompts)
-    log.info(f"[{lang}] ✓ Embeddings shape: {text_emb.shape}")
+    log.info(f"✓ Embeddings shape: {text_emb.shape}")
     return text_emb, labels
 
 
@@ -226,11 +223,11 @@ def compute_umap_layout(embeddings: torch.Tensor, n_neighbors: int = 15, seed: i
     return coords, model, mean, scale
 
 
-def init_lang_state(taxonomy: dict, lang: str, n_neighbors: int):
-    """Build embeddings + UMAP for one language and store in LANG_STATE[lang]."""
-    text_emb, labels = build_text_embeddings_for_lang(taxonomy, lang)
+def init_lang_state(taxonomy: dict, n_neighbors: int):
+    """Build English embeddings + UMAP once. All languages share this state."""
+    text_emb, labels = build_text_embeddings(taxonomy)
     coords, umap_model, umap_mean, umap_scale = compute_umap_layout(text_emb, n_neighbors)
-    LANG_STATE[lang] = {
+    LANG_STATE['en'] = {
         'text_embeddings': text_emb,
         'text_labels':     labels,
         'tsne_coords':     coords,
@@ -238,11 +235,11 @@ def init_lang_state(taxonomy: dict, lang: str, n_neighbors: int):
         'umap_mean':       umap_mean,
         'umap_scale':      umap_scale,
     }
-    log.info(f"[{lang}] ✓ Language state ready")
+    log.info("✓ Language state ready (English embeddings, multilingual display)")
 
 
-def project_new_term(new_emb: torch.Tensor, lang: str = 'en') -> np.ndarray:
-    st = LANG_STATE[lang]
+def project_new_term(new_emb: torch.Tensor) -> np.ndarray:
+    st = LANG_STATE['en']
     X = new_emb.cpu().numpy().astype(np.float32)
     coords = st['umap_model'].transform(X)[0]
     coords = (coords - st['umap_mean']) / st['umap_scale']
@@ -256,9 +253,7 @@ def project_new_term(new_emb: torch.Tensor, lang: str = 'en') -> np.ndarray:
 @torch.no_grad()
 def process_frame(img: Image.Image, top_k: int = 15,
                   categories: set = None, lang: str = 'en') -> dict:
-    if lang not in LANG_STATE:
-        lang = 'en'
-    st = LANG_STATE[lang]
+    st = LANG_STATE['en']
 
     t0 = time.time()
     img_emb = encode_image_tensor(img)
@@ -277,11 +272,12 @@ def process_frame(img: Image.Image, top_k: int = 15,
     for idx in top_idx:
         idx = int(idx)
         entry = st['text_labels'][idx]
+        display_word = get_translated_word(TAXONOMY, entry['en_word'], lang)
         top_terms.append({
-            "word":     entry["word"],
-            "en_word":  entry["en_word"],
-            "category": entry["category"],
-            "color":    entry["color"],
+            "word":       display_word,
+            "en_word":    entry["en_word"],
+            "category":   entry["category"],
+            "color":      entry["color"],
             "similarity": round(float(sims[idx]), 4),
         })
 
@@ -294,7 +290,7 @@ def process_frame(img: Image.Image, top_k: int = 15,
             for label, p in zip(data["labels"], probs)
         }
 
-    user_tsne = project_to_tsne(img_emb, categories=categories, lang=lang)
+    user_tsne = project_to_tsne(img_emb, categories=categories)
     elapsed = time.time() - t0
 
     return {
@@ -305,11 +301,8 @@ def process_frame(img: Image.Image, top_k: int = 15,
     }
 
 
-def project_to_tsne(img_emb: torch.Tensor, categories: set = None,
-                    lang: str = 'en') -> list:
-    if lang not in LANG_STATE:
-        lang = 'en'
-    st = LANG_STATE[lang]
+def project_to_tsne(img_emb: torch.Tensor, categories: set = None) -> list:
+    st = LANG_STATE['en']
     mode = args.projection if args else 'top1'
 
     sims = (img_emb @ st['text_embeddings'].T).squeeze(0).cpu().numpy()
@@ -375,14 +368,13 @@ async def favicon():
 @app.get("/api/init")
 async def api_init(lang: str = 'en'):
     """Return taxonomy metadata, UMAP coords, and translations for the frontend."""
-    if lang not in LANG_STATE:
-        lang = 'en'
-    st = LANG_STATE[lang]
+    st = LANG_STATE['en']
 
     terms = []
     for i, label in enumerate(st['text_labels']):
+        display_word = get_translated_word(TAXONOMY, label['en_word'], lang)
         terms.append({
-            "word":     label["word"],
+            "word":     display_word,
             "en_word":  label["en_word"],
             "category": label["category"],
             "color":    label["color"],
@@ -487,28 +479,28 @@ class AddWordRequest(BaseModel):
 @app.post("/api/add_word")
 async def add_word(req: AddWordRequest):
     word = req.word.strip().lower()
-    lang = req.lang if req.lang in LANG_STATE else 'en'
+    lang = req.lang  # kept for CSV logging only
 
     if not word:
         return {"status": "error", "message": "Empty word"}
 
-    st = LANG_STATE[lang]
+    st = LANG_STATE['en']
     if any(l["en_word"] == word and l["category"] == req.category
            for l in st['text_labels']):
         return {"status": "duplicate", "word": word}
 
-    prompt = make_prompt(word, req.category, lang)
-    log.info(f"[{lang}] Embedding custom word: '{word}' (prompt: '{prompt}')")
+    prompt = make_prompt(word, req.category)
+    log.info(f"Embedding custom word: '{word}' (prompt: '{prompt}')")
     new_emb = encode_texts([prompt])
 
-    tsne_pos = project_new_term(new_emb, lang)
+    tsne_pos = project_new_term(new_emb)
 
     st['text_embeddings'] = torch.cat([st['text_embeddings'], new_emb], dim=0)
     st['text_labels'].append({
-        "word":    word,
-        "en_word": word,
+        "word":     word,
+        "en_word":  word,
         "category": req.category,
-        "color":   req.color,
+        "color":    req.color,
     })
     st['tsne_coords'] = np.vstack([st['tsne_coords'], tsne_pos])
 
@@ -518,7 +510,7 @@ async def add_word(req: AddWordRequest):
     else:
         TAXONOMY["categories"][req.category] = {"color": req.color, "words": [word]}
 
-    log.info(f"[{lang}] ✓ Added '{word}' at ({tsne_pos[0]:.3f}, {tsne_pos[1]:.3f})")
+    log.info(f"✓ Added '{word}' at ({tsne_pos[0]:.3f}, {tsne_pos[1]:.3f})")
 
     append_csv({
         "timestamp": datetime.now().isoformat(timespec="seconds"),
@@ -542,10 +534,8 @@ async def add_word(req: AddWordRequest):
 
 
 @app.delete("/api/custom_words/{word}")
-async def remove_custom_word(word: str, lang: str = 'en'):
-    if lang not in LANG_STATE:
-        lang = 'en'
-    st = LANG_STATE[lang]
+async def remove_custom_word(word: str):
+    st = LANG_STATE['en']
     keep = [i for i, l in enumerate(st['text_labels'])
             if not (l["en_word"] == word and l["category"] == "Custom")]
     if len(keep) == len(st['text_labels']):
@@ -558,15 +548,13 @@ async def remove_custom_word(word: str, lang: str = 'en'):
     if "Custom" in TAXONOMY["categories"] and word in TAXONOMY["categories"]["Custom"]["words"]:
         TAXONOMY["categories"]["Custom"]["words"].remove(word)
 
-    log.info(f"[{lang}] Removed custom word: '{word}'")
+    log.info(f"Removed custom word: '{word}'")
     return {"status": "ok", "word": word}
 
 
 @app.delete("/api/custom_words")
-async def clear_custom_words(lang: str = 'en'):
-    if lang not in LANG_STATE:
-        lang = 'en'
-    st = LANG_STATE[lang]
+async def clear_custom_words():
+    st = LANG_STATE['en']
     keep = [i for i, l in enumerate(st['text_labels']) if l["category"] != "Custom"]
     removed = len(st['text_labels']) - len(keep)
 
@@ -577,7 +565,7 @@ async def clear_custom_words(lang: str = 'en'):
     if "Custom" in TAXONOMY["categories"]:
         TAXONOMY["categories"]["Custom"]["words"] = []
 
-    log.info(f"[{lang}] Cleared {removed} custom words")
+    log.info(f"Cleared {removed} custom words")
     return {"status": "ok", "removed": removed}
 
 
@@ -673,9 +661,8 @@ def main():
     # Build FairFace embeddings once (English prompts, language-independent)
     FAIRFACE_EMBEDDINGS = build_fairface_embeddings(TAXONOMY)
 
-    # Build embeddings + UMAP for each language
-    for lang in SUPPORTED_LANGS:
-        init_lang_state(TAXONOMY, lang, args.umap_neighbors)
+    # Build embeddings + UMAP once in English; other languages are display-only
+    init_lang_state(TAXONOMY, args.umap_neighbors)
 
     _auto_open_session("default")
 
