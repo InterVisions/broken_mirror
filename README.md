@@ -159,3 +159,9 @@ Built at the **[Computer Vision Center (CVC)](https://www.cvc.uab.es)**, Univers
 ## License
 
 MIT © 2025–2026 Computer Vision Center (CVC-CERCA), Universitat Autònoma de Barcelona, and the InterVisions consortium. See [LICENSE](LICENSE).
+
+## Funding Acknowledgement
+
+![Co-funded by the European Union](eu-funded.png)
+
+Funded by the European Union. Views and opinions expressed are however those of the author(s) only and do not necessarily reflect those of the European Union or the European Education and Culture Executive Agency (EACEA). Neither the European Union nor EACEA can be held responsible for them.
