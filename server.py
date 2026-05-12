@@ -12,7 +12,9 @@ import base64
 import csv
 import json
 import logging
+import os
 import time
+from contextlib import asynccontextmanager
 from datetime import datetime
 from io import BytesIO, StringIO
 from pathlib import Path
@@ -346,10 +348,68 @@ def project_to_tsne(img_emb: torch.Tensor, categories: set = None) -> list:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+#  Per-worker startup (reads config from env vars set by main())
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _startup():
+    global MODEL, PREPROCESS, TOKENIZER, DEVICE, TAXONOMY
+    global FAIRFACE_EMBEDDINGS, MAX_LABELS, args
+    global SUPPORTED_LANGS
+
+    model_name = os.environ.get('SOBIT_MODEL', 'ViT-B/32')
+    device_arg = os.environ.get('SOBIT_DEVICE', 'auto')
+    max_labels = int(os.environ.get('SOBIT_MAX_LABELS', '20'))
+    tax_path   = os.environ.get('SOBIT_TAXONOMY',
+                                str(Path(__file__).parent / "config" / "sobit_taxonomy.json"))
+    umap_nbrs  = int(os.environ.get('SOBIT_UMAP_NEIGHBORS', '15'))
+    projection = os.environ.get('SOBIT_PROJECTION', 'top1')
+    proj_tau   = float(os.environ.get('SOBIT_PROJECTION_TAU', '0.1'))
+    langs_env  = os.environ.get('SOBIT_LANGS', None)
+
+    args = argparse.Namespace(
+        model=model_name, device=device_arg, max_labels=max_labels,
+        taxonomy=tax_path, umap_neighbors=umap_nbrs,
+        projection=projection, projection_tau=proj_tau, langs=langs_env,
+    )
+    MAX_LABELS = max_labels
+
+    DEVICE = ("cuda" if torch.cuda.is_available() else "cpu") if device_arg == "auto" else device_arg
+    log.info(f"[pid={os.getpid()}] Device: {DEVICE}")
+
+    MODEL, PREPROCESS, TOKENIZER, _ = load_clip_model(model_name, DEVICE)
+
+    with open(tax_path, encoding="utf-8") as f:
+        TAXONOMY = json.load(f)
+    log.info(f"Loaded taxonomy from {tax_path}")
+
+    if "Custom" not in TAXONOMY["categories"]:
+        TAXONOMY["categories"]["Custom"] = {"color": CUSTOM_COLOR, "words": []}
+
+    available = ['en']
+    if 'translations' in TAXONOMY:
+        available += [l for l in TAXONOMY['translations'] if l != 'en']
+
+    langs_to_init = ([l.strip() for l in langs_env.split(',') if l.strip() in available]
+                     if langs_env else available)
+    SUPPORTED_LANGS = langs_to_init
+    log.info(f"Initialising languages: {SUPPORTED_LANGS}")
+
+    FAIRFACE_EMBEDDINGS = build_fairface_embeddings(TAXONOMY)
+    init_lang_state(TAXONOMY, umap_nbrs)
+    _auto_open_session(f"default_w{os.getpid()}")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    _startup()
+    yield
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 #  FastAPI application
 # ═══════════════════════════════════════════════════════════════════════════════
 
-app = FastAPI(title="InterVisions - So-B-IT Broken Mirror")
+app = FastAPI(title="InterVisions - So-B-IT Broken Mirror", lifespan=lifespan)
 
 STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -620,55 +680,33 @@ def parse_args():
     p.add_argument("--projection-tau", type=float, default=0.1)
     p.add_argument("--langs", default=None,
                    help="Comma-separated languages to load (default: all available). E.g. en,es")
+    p.add_argument("--workers", type=int, default=1,
+                   help="Number of uvicorn worker processes (default: 1)")
     return p.parse_args()
 
 
 def main():
-    global MODEL, PREPROCESS, TOKENIZER, DEVICE, TAXONOMY
-    global FAIRFACE_EMBEDDINGS, MAX_LABELS, args
-    global SUPPORTED_LANGS
+    a = parse_args()
 
-    args = parse_args()
-    MAX_LABELS = args.max_labels
-
-    DEVICE = ("cuda" if torch.cuda.is_available() else "cpu") if args.device == "auto" else args.device
-    log.info(f"Device: {DEVICE}")
-
-    MODEL, PREPROCESS, TOKENIZER, _ = load_clip_model(args.model, DEVICE)
-
-    tax_path = args.taxonomy or str(Path(__file__).parent / "config" / "sobit_taxonomy.json")
-    with open(tax_path, encoding="utf-8") as f:
-        TAXONOMY = json.load(f)
-    log.info(f"Loaded taxonomy from {tax_path}")
-
-    if "Custom" not in TAXONOMY["categories"]:
-        TAXONOMY["categories"]["Custom"] = {"color": CUSTOM_COLOR, "words": []}
-
-    # Determine which languages to initialise
-    available = ['en']
-    if 'translations' in TAXONOMY:
-        available += [l for l in TAXONOMY['translations'] if l != 'en']
-
-    if args.langs:
-        requested = [l.strip() for l in args.langs.split(',')]
-        langs_to_init = [l for l in requested if l in available]
-    else:
-        langs_to_init = available
-
-    SUPPORTED_LANGS = langs_to_init
-    log.info(f"Initialising languages: {SUPPORTED_LANGS}")
-
-    # Build FairFace embeddings once (English prompts, language-independent)
-    FAIRFACE_EMBEDDINGS = build_fairface_embeddings(TAXONOMY)
-
-    # Build embeddings + UMAP once in English; other languages are display-only
-    init_lang_state(TAXONOMY, args.umap_neighbors)
-
-    _auto_open_session("default")
+    # Export config to env so each worker process picks it up via _startup()
+    os.environ['SOBIT_MODEL']          = a.model
+    os.environ['SOBIT_DEVICE']         = a.device
+    os.environ['SOBIT_MAX_LABELS']     = str(a.max_labels)
+    os.environ['SOBIT_UMAP_NEIGHBORS'] = str(a.umap_neighbors)
+    os.environ['SOBIT_PROJECTION']     = a.projection
+    os.environ['SOBIT_PROJECTION_TAU'] = str(a.projection_tau)
+    if a.taxonomy:
+        os.environ['SOBIT_TAXONOMY']   = a.taxonomy
+    if a.langs:
+        os.environ['SOBIT_LANGS']      = a.langs
 
     import uvicorn
-    log.info(f"Starting server on http://{args.host}:{args.port}")
-    uvicorn.run(app, host=args.host, port=args.port, log_level="info")
+    log.info(f"Starting server on http://{a.host}:{a.port} ({a.workers} worker(s))")
+    if a.workers > 1:
+        uvicorn.run("server:app", host=a.host, port=a.port,
+                    workers=a.workers, log_level="info")
+    else:
+        uvicorn.run(app, host=a.host, port=a.port, log_level="info")
 
 
 if __name__ == "__main__":
